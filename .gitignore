@@ -4,6 +4,9 @@ venv/
 __pycache__/
 *.py[cod]
 
+# Personal settings (created by `python tram_lcd.py setup`)
+config.toml
+
 # Local previews / scratch output
 preview*.png
 stops.csv

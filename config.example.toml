@@ -1,0 +1,28 @@
+# Kraken Tram Display configuration - created by `python tram_lcd.py setup`.
+# Edit freely; restart the display afterwards.
+
+[station]
+name = "Vinzenzgasse"
+diva = "60201426"          # find others with: python tram_lcd.py search <name>
+
+# Rows to show (max 4), in this order. `towards` is optional - leave it out to
+# show every direction of that line. No [[departures]] at all = show everything.
+# List what departs here with: python tram_lcd.py lines <diva>
+
+[[departures]]
+line = "42"
+
+[[departures]]
+line = "9"
+
+[display]
+title = ""               # empty = station name
+language = "de"             # "de" or "en"
+tilt = 0                    # degrees counter-clockwise (negative = clockwise)
+brightness = -1             # 0-100, -1 = leave unchanged
+refresh_seconds = 10        # data refresh interval (min 5)
+footer = "© Sorrow"         # empty = no footer badge
+
+[colors]
+clock = "#C8AAFF"
+footer = "#C8AAFF"

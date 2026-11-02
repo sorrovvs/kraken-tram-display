@@ -25,11 +25,23 @@ Get-Process python*, NZXT* | Select-Object ProcessName, Id
 
 ## Text is cut off at the edge
 
-The LCD is a 320 px circle. If you change font sizes or `TILT_FIX`, check that everything stays inside it:
+The LCD is a 320 px circle. Long direction names are shortened with "…" automatically. If you change the
+`tilt` or the code, check that everything stays inside the circle:
 
 ```powershell
-.venv\Scripts\python.exe -c "import tram_lcd as t; t.render(t.build_view(t.fetch(), 0, None), refresh_in=8).save('preview.png')"
+.venv\Scripts\python.exe tram_lcd.py preview -o preview.png
 ```
+
+## "No config found" / wrong station
+
+Run `python tram_lcd.py setup`. To find a station's DIVA number by hand, use `python tram_lcd.py search <name>`.
+To see which lines and directions you can choose, use `python tram_lcd.py lines <name>`.
+
+## A row is missing
+
+The `towards` text in `config.toml` must match what Wiener Linien reports. Check it with
+`python tram_lcd.py lines <station>`, or remove `towards` to show every direction of that line.
+Some lines also don't run at night, so they won't show up then.
 
 ## The countdown runs too fast or too slow
 
@@ -44,8 +56,8 @@ On Windows with liquidctl 1.16.0 / WinUsbCDC 1.7, LCD uploads to a Kraken Z3 (fi
 of the box. `tram_lcd.py` patches three things at runtime. Nothing is installed or changed system-wide.
 
 1. **The LCD bulk interface is never found.** `WinUsbPy.list_usb_devices()` only returns devices when a
-   vid/pid or name filter is passed, but liquidctl calls it without one. The script injects
-   `vid=0x1E71, pid=0x3008`.
+   vid/pid or name filter is passed, but liquidctl calls it without one. The script injects NZXT's
+   vendor id and the product ids of every Kraken model liquidctl's LCD driver supports.
 2. **`initialize()` fails.** The Z3 does not answer the lighting-info query (`0x20 0x03`). The script uses
    `light_init()`, which is liquidctl's initialize sequence without that query.
 3. **"Failed to setup bucket for data transfer".** liquidctl's `_write_then_read()` treats the next HID

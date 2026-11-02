@@ -17,22 +17,26 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Quit NZXT CAM, then run `.venv\Scripts\python.exe tram_lcd.py`.
+Run `.venv\Scripts\python.exe tram_lcd.py setup` to create your `config.toml`. Then quit NZXT CAM and run
+`.venv\Scripts\python.exe tram_lcd.py`.
 
 ### Working without the hardware
 
 You can render a preview image without a Kraken connected:
 
 ```powershell
-.venv\Scripts\python.exe -c "import tram_lcd as t; t.render(t.build_view(t.fetch(), 0, None), refresh_in=8).save('preview.png')"
+.venv\Scripts\python.exe tram_lcd.py preview -o preview.png
 ```
 
-Check that everything stays inside the 320 px circle, including with `TILT_FIX` applied.
+Check that everything stays inside the 320 px circle, including with a `tilt` set. Try a station with long
+names and several line types (e.g. Praterstern or Karlsplatz) to test the layout.
 
 ## Code guidelines
 
 - Keep it a **single script with no extra dependencies** unless there is a strong reason.
-- Put user-tunable values as constants at the top of `tram_lcd.py` and document them in the README table.
+- User settings belong in `config.toml`: add the field to `Config` (load **and** save), to
+  `config.example.toml` and to the README.
+- Keep the setup wizard working with plain Enter presses, so every question needs a sensible default.
 - Follow PEP 8. Use 4-space indentation and keep lines at most ~110 characters.
 - Any liquidctl workaround must be explained in a comment **and** in `docs/TROUBLESHOOTING.md`.
 - Add an entry under `## [Unreleased]` in `CHANGELOG.md`.

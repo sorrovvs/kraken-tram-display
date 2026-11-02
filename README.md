@@ -1,9 +1,8 @@
 # Kraken Tram Display
 
-Live Vienna tram departures on the round LCD of an **NZXT Kraken Z3** AIO cooler.
-
-The display shows lines **42** and **9** from the stop **Vinzenzgasse** with real-time countdowns from the
-Wiener Linien open data API. It is easy to change it to any other stop and lines.
+Live **Wiener Linien** departures for **any station in Vienna** on the round LCD of an **NZXT Kraken** AIO cooler.
+Trams, buses, U-Bahn, night buses and the Badner Bahn are all supported. A setup wizard lets you pick
+your station and lines in under a minute.
 
 ```
         Vinzenzgasse
@@ -18,49 +17,119 @@ Wiener Linien open data API. It is easy to change it to any other stop and lines
 
 ## Features
 
-- **Real-time departures**: the next tram and the one after it, for every direction
-- **Animated notifications**: when a countdown changes, a red box blinks once behind the number and then fades out over 3 s
-- **Blinking "jetzt"**: the word blinks on a green background when a tram is arriving now
+- **Any station, any line**: choose up to 4 rows (line + direction) with the setup wizard
+- **Real-time departures**: the next vehicle and the one after it
+- **Line colours**: U1–U6 in their official colours, plus trams, buses, S-Bahn and WLB
+- **Animated notifications**: when a countdown changes, a red box blinks once and then fades over 3 s
+- **Blinking "jetzt" / "now"** on a green background when a vehicle is arriving
 - **Refresh countdown**: the bottom line shows the seconds until the next data refresh
-- **Tilt compensation**: the whole picture can be rotated to match a pump that is mounted at an angle
-- **Self-healing**: the script reconnects on its own after USB or network errors
+- **German or English** labels
+- **Tilt compensation** for pumps mounted at an angle
+- **Self-healing**: reconnects on its own after USB or network errors
 
 ## Requirements
 
-| What | Version / notes |
+| What | Notes |
 |---|---|
-| NZXT Kraken **Z3** (Z53 / Z63 / Z73) | USB ID `1e71:3008`. Firmware 5.11 tested |
-| Windows 10/11 | Linux should work, but the WinUSB workarounds are Windows-specific |
-| Python | 3.10+ (3.13 tested) |
-| NZXT CAM | **Must be closed.** CAM locks the USB device |
+| NZXT Kraken with LCD | **Kraken Z3** (Z53/Z63/Z73) is tested. Kraken 2023 / 2024 (Elite, Plus) should work through the same liquidctl driver but are untested |
+| Windows 10/11 | Linux may work, but the USB workarounds are written for Windows |
+| Python | **3.11+** (3.13 tested) |
+| NZXT CAM | **Must be closed while the display runs.** CAM locks the USB device |
 
-> **Note:** NZXT CAM's *Web Integration* only works on Kraken Elite / 2023 models. That is why this project
-> drives the Z3 screen directly through [liquidctl](https://github.com/liquidctl/liquidctl).
+> **Note:** NZXT CAM's *Web Integration* only works on newer Krakens. This project drives the LCD directly
+> through [liquidctl](https://github.com/liquidctl/liquidctl), so it also works on the Z3.
 
-## Installation
+## Quick start
 
 ```powershell
 git clone https://github.com/sorrovvs/kraken-tram-display.git
 cd kraken-tram-display
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+.venv\Scripts\python.exe tram_lcd.py setup     # pick your station and lines
+.venv\Scripts\python.exe tram_lcd.py           # quit NZXT CAM first, then run
 ```
 
-## Usage
+### The setup wizard
 
-1. **Quit NZXT CAM** completely (tray icon → Exit).
-2. Start the display:
+```
+=== Kraken Tram Display setup ===
 
-   ```powershell
-   .venv\Scripts\python.exe tram_lcd.py      # with log output
-   .venv\Scripts\pythonw.exe tram_lcd.py     # without a console window
-   ```
+Station name (e.g. Karlsplatz, Schwedenplatz): praterstern
+   1) Praterstern S U  (DIVA 60201040)
+Number [1]:
 
-3. Stop it with `Ctrl+C`. The screen then switches back to the liquid temperature.
+Lines departing at Praterstern S U right now:
+   1) U1    → Alaudagasse                  next: 2 min
+   2) U1    → Leopoldau                    next: 1 min
+   3) U2    → Karlsplatz                   next: 4 min
+   ...
+Pick up to 4 rows, comma separated (e.g. 1,3) - Enter = first 4: 1,2,5
 
-### Start automatically at login
+Display options (Enter keeps the value in brackets):
+Language de/en [de]: en
+Tilt in degrees, counter-clockwise (0 = straight) [0]:
+Refresh every N seconds [10]:
+Footer text (type - for none) [© Sorrow]:
 
-`start-hidden.vbs` starts the script without a window. Put a shortcut to it in your Startup folder
+Saved config.toml
+Preview image: preview.png
+```
+
+The wizard saves `config.toml` and renders `preview.png`, so you can see the result before running it on
+the cooler. Run `setup` again at any time to change station.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `python tram_lcd.py` | Run the display (same as `run`) |
+| `python tram_lcd.py setup [name]` | Interactive setup |
+| `python tram_lcd.py search <name>` | Find stations and their DIVA numbers |
+| `python tram_lcd.py lines <name or DIVA>` | List every line and direction departing at a station |
+| `python tram_lcd.py preview [-o file.png]` | Render one frame from live data, without a Kraken |
+| `--config <path>` | Use another config file, e.g. to switch between home and work stations |
+
+Use `pythonw.exe` instead of `python.exe` to run without a console window.
+
+## Configuration (`config.toml`)
+
+The setup wizard writes this file for you. You can also edit it by hand (see
+[`config.example.toml`](config.example.toml)):
+
+```toml
+[station]
+name = "Vinzenzgasse"
+diva = "60201426"
+
+# up to 4 rows, shown in this order; `towards` is optional (leave it out = every direction)
+[[departures]]
+line = "42"
+towards = "Antonigasse"
+
+[[departures]]
+line = "9"
+
+[display]
+title = ""               # empty = station name
+language = "de"          # "de" or "en"
+tilt = 0                 # degrees counter-clockwise (negative = clockwise)
+brightness = -1          # 0-100, -1 = leave unchanged
+refresh_seconds = 10     # data refresh interval (min 5)
+footer = "© Sorrow"      # empty = no footer badge
+
+[colors]
+clock = "#C8AAFF"
+footer = "#C8AAFF"
+```
+
+With no `[[departures]]` at all, the display shows the first 4 lines of the station. Restart the display
+after editing.
+
+## Start automatically at login
+
+`start-hidden.vbs` starts the display without a window. Put a shortcut to it in your Startup folder
 (press `Win+R` and type `shell:startup`):
 
 ```powershell
@@ -73,43 +142,17 @@ $l.Save()
 
 Also turn off "Start CAM on Windows startup" in the CAM settings.
 
-## Configuration
-
-All settings are constants at the top of [`tram_lcd.py`](tram_lcd.py):
-
-| Setting | Default | Meaning |
-|---|---|---|
-| `DIVA` | `60201426` | Stop ID (Vinzenzgasse). See [Finding your stop](#finding-your-stop) |
-| `LINES` | `["42", "9"]` | Lines to show, in this order |
-| `FETCH_EVERY` | `10` | Seconds between data refreshes |
-| `TILT_FIX` | `28` | Degrees to rotate the picture counter-clockwise (negative = clockwise) |
-| `BRIGHTNESS` | `None` | Force the LCD brightness (0–100), or leave it unchanged |
-| `FRAME_S` | `0.25` | Length of one animation frame in seconds |
-| `FADE_SECONDS` | `3.0` | How long the red notification takes to fade |
-| `BLINK_FRAMES` | `2` | How many frames "jetzt" stays on, then off |
-| `CLOCK_COL`, `CREDIT_COL`, `GREEN`, `RED`, … | | Colours as RGB tuples |
-
-### Finding your stop
-
-Download the Wiener Linien stop list and search it for your stop name:
-
-```powershell
-Invoke-WebRequest https://www.wienerlinien.at/ogd_realtime/doku/ogd/wienerlinien-ogd-haltepunkte.csv -OutFile stops.csv
-Select-String -Path stops.csv -Pattern "Vinzenzgasse"
-```
-
-The second column (`DIVA`) is the value to use.
-
 ## How it works
 
 ```
-Wiener Linien API ──(every 10 s)──► tram_lcd.py ──► Pillow draws ~40 frames ──► GIF ──(liquidctl, USB)──► Kraken LCD
+Wiener Linien API ──(every N s)──► tram_lcd.py ──► Pillow draws the frames ──► GIF ──(liquidctl, USB)──► Kraken LCD
 ```
 
-The Z3 cannot render web pages and only accepts static images or GIFs. On every refresh cycle the
+The Kraken LCD cannot render web pages and only accepts static images or GIFs. On every refresh cycle the
 script draws an animated GIF that covers the time until the next refresh. Each frame is drawn for the
 exact moment it will be visible, so the countdowns, fades and blinking run on the cooler itself, with
-only **one USB upload per cycle**.
+only **one USB upload per cycle**. On Kraken 2023 firmware 2.x, which doesn't accept GIFs, the script
+automatically falls back to static images.
 
 Details on the liquidctl workarounds are in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
@@ -119,7 +162,7 @@ Details on the liquidctl workarounds are in [docs/TROUBLESHOOTING.md](docs/TROUB
   not follow a temperature curve. You can set a curve with liquidctl, e.g.
   `liquidctl --match kraken set pump speed 30 50 40 80`.
 - **LCD memory:** the screen is rewritten once per refresh cycle. It is not known whether the
-  Kraken's image memory wears out from frequent writes. Raise `FETCH_EVERY` if you want fewer writes.
+  Kraken's image memory wears out from frequent writes. Raise `refresh_seconds` if you want fewer writes.
 
 ## Contributing
 
@@ -130,7 +173,7 @@ Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and th
 
 Code: [MIT](LICENSE) © Sorrow
 
-Departure data: [Wiener Linien Open Government Data](https://www.data.gv.at/katalog/dataset/wiener-linien-echtzeitdaten-via-datendrehscheibe-wien),
+Departure and stop data: [Wiener Linien Open Government Data](https://www.data.gv.at/katalog/dataset/wiener-linien-echtzeitdaten-via-datendrehscheibe-wien),
 licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.de). Datenquelle: Stadt Wien – data.wien.gv.at.
 
 Not affiliated with NZXT or Wiener Linien.
