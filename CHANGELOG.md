@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-02
+
 ### Added
 - Up to 6 rows (more than 4 are drawn smaller)
 - S-Bahn rows from ÖBB: `oebb_station` in a `[[departures]]` entry
