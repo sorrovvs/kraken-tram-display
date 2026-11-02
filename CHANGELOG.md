@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-11-02
+
+### Fixed
+- A configured direction disappearing (e.g. 9 → Westbahnhof S U) whenever the next tram was a short run
+  to the depot: Wiener Linien rows are now grouped by direction and named after the destination most
+  upcoming trams have; if none goes to the configured destination, the row takes that line's other
+  unconfigured direction instead of vanishing
+
 ## [1.4.2] - 2026-11-02
 
 ### Fixed

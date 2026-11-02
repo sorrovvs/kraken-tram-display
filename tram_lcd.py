@@ -398,21 +398,32 @@ def norm(s):
 
 
 def monitor_lines(diva):
-    """All (line, towards) at a station, merged across platforms: dicts with line/towards/type/times."""
+    """All (line, direction) at a station, merged across platforms: dicts with line/towards/type/times.
+    The feed's line-level `towards` is only the *next* vehicle's destination, so a single short
+    run (e.g. "Winckelmannstraße, Betriebsbhf. Rudolfsheim" instead of "Westbahnhof S U") renamed
+    the whole direction and the configured row vanished. Group by the direction code instead and
+    label it with the destination most of the upcoming vehicles have."""
     data = http_json(MONITOR_API.format(urllib.parse.quote(diva)))
     merged = {}
     for mon in data.get("data", {}).get("monitors", []):
         for line in mon.get("lines", []):
-            key = (line.get("name", ""), line.get("towards", "").strip())
-            entry = merged.setdefault(key, {"line": key[0], "towards": key[1],
-                                            "type": line.get("type", ""), "times": []})
+            name, line_towards = line.get("name", ""), line.get("towards", "").strip()
+            key = (name, line.get("direction") or line_towards)
+            entry = merged.setdefault(key, {"line": name, "towards": line_towards,
+                                            "type": line.get("type", ""), "times": [], "dests": {}})
             for dep in line.get("departures", {}).get("departure", []):
                 t = dep.get("departureTime", {})
                 iso = t.get("timeReal") or t.get("timePlanned")
                 if iso:
                     entry["times"].append(datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.%f%z"))
+                dest = ((dep.get("vehicle") or {}).get("towards") or line_towards).strip()
+                if dest:
+                    entry["dests"][dest] = entry["dests"].get(dest, 0) + 1
     for e in merged.values():
         e["times"].sort()
+        dests = e.pop("dests")
+        if dests:  # most common destination; ties go to the earliest-seen one
+            e["towards"] = max(dests, key=dests.get)
     return list(merged.values())
 
 
@@ -458,13 +469,23 @@ def select_rows(lines, oebb=None):
     """Apply the [[departures]] filter and order from the config. oebb: {station: oebb_lines()}."""
     if not CFG.departures:
         return sorted(lines, key=line_sort_key)[:MAX_ROWS]
+    def pool(want):
+        src = (oebb or {}).get(want["oebb"], []) if want.get("oebb") else lines
+        return [e for e in sorted(src, key=line_sort_key) if e["line"].casefold() == want["line"].casefold()]
+
+    def exact(want, e):
+        return not want["towards"] or norm(e["towards"]) == norm(want["towards"])
+
+    # Wiener Linien rows whose destination isn't in the feed right now (e.g. late evening, when
+    # only depot runs are coming) take the line's direction that no other configured row named
+    claimed = [id(e) for w in CFG.departures for e in pool(w) if w["towards"] and exact(w, e)]
     rows = []
     for want in CFG.departures:
-        pool = (oebb or {}).get(want["oebb"], []) if want.get("oebb") else lines
-        for e in sorted(pool, key=line_sort_key):
-            if e["line"].casefold() == want["line"].casefold() and \
-                    (not want["towards"] or norm(e["towards"]) == norm(want["towards"])) and e not in rows:
-                rows.append(e)
+        found = [e for e in pool(want) if exact(want, e)]
+        if not found and want["towards"] and not want.get("oebb"):
+            found = [e for e in pool(want) if id(e) not in claimed][:1]
+            claimed += [id(e) for e in found]
+        rows += [e for e in found if e not in rows]
     return rows[:MAX_ROWS]
 
 
