@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Up to 6 rows (more than 4 are drawn smaller)
+- S-Bahn rows from ÖBB: `oebb_station` in a `[[departures]]` entry
+- Disruptions: when a line can't run (not lift/escalator outages), its Wiener Linien disruption text scrolls
+  through in turns with the direction name (`disruptions`, colour `info`)
+- New look by default: clock at the top with "Linie" / "Abfahrt in Minuten" column labels (`header`),
+  "● LIVE" plus a refresh ring next to the clock (`live_in_header`), LED dot digits for minutes and line
+  numbers (`led_numbers`), white outlined line badges (`badge_style`, `badge`, `badge_text`), Arial (`font`).
+  `header = "station"`, `led_numbers = false` and `badge_style = "fill"` bring back the old look
+- Long direction names scroll slowly instead of being cut off
+- Options `now_text`, `now_style` (text / yellow dot / yellow block), `soon_minutes`, `flash_blink`,
+  `flash_fade_in`, `flash_fade_out`, `sign_font` (your own LED-style font in `fonts/`, not included), and
+  the colours `flash`, `soon`, `sign`
+
 ### Changed
 - "jetzt"/"now" appears only while the tram is expected at the stop (20 s before it really leaves,
   `NOW_WINDOW_S`) instead of for the whole last minute; until then the countdown shows 1'. When a tram
@@ -17,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the Kraken looped back to the start of the cycle. GIFs now run past the expected next upload
 - Countdowns jumping between two minutes (4' → 5' → 4') because the live estimates wobble by ±30 s:
   a countdown now goes up only once the new time is 30 s into the higher minute
+- Whole screen going blank for a moment every few refreshes: every frame had its own palette, so a GIF was
+  ~600 KB. All frames now share one palette (~35 KB)
 
 ## [1.3.0] - 2026-11-02
 

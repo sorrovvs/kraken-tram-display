@@ -17,7 +17,7 @@ your station and lines in under a minute.
 
 ## Features
 
-- **Any station, any line**: choose up to 4 rows (line + direction) with the setup wizard
+- **Any station, any line**: choose up to 6 rows (line + direction) with the setup wizard
 - **Real-time departures**: the next vehicle and the one after it
 - **Line colours**: U1–U6 in their official colours, plus trams, buses, S-Bahn and WLB
 - **Animated notifications**: when a countdown changes, a red box blinks once and then fades over 3 s
@@ -67,7 +67,7 @@ Lines departing at Praterstern S U right now:
    2) U1    → Leopoldau                    next: 1 min
    3) U2    → Karlsplatz                   next: 4 min
    ...
-Pick up to 4 rows, comma separated (e.g. 1,3) - Enter = first 4: 1,2,5
+Pick up to 6 rows, comma separated (e.g. 1,3) - Enter = first 6: 1,2,5
 
 Display options (Enter keeps the value in brackets):
 Language de/en [de]: en
@@ -106,7 +106,7 @@ The setup wizard writes this file for you. You can also edit it by hand (see
 name = "Vinzenzgasse"
 diva = "60201426"
 
-# up to 4 rows, shown in this order; `towards` is optional (leave it out = every direction)
+# up to 6 rows (more than 4 are drawn smaller), shown in this order; `towards` is optional (leave it out = every direction)
 [[departures]]
 line = "42"
 towards = "Antonigasse"
@@ -114,20 +114,45 @@ towards = "Antonigasse"
 [[departures]]
 line = "9"
 
+# S-Bahn rows come from ÖBB: give the station's ÖBB id ("evaId" in the ÖBB timetable)
+# [[departures]]
+# line = "S45"
+# towards = "Hütteldorf"
+# oebb_station = "1191801"     # Gersthof
+
 [display]
 title = ""               # empty = station name
 language = "de"          # "de" or "en"
+now_text = ""            # replaces "jetzt"/"now"; empty = language default
 tilt = 0                 # degrees counter-clockwise (negative = clockwise)
 brightness = -1          # 0-100, -1 = leave unchanged
 refresh_seconds = 10     # data refresh interval (min 5)
 footer = "© Sorrow"      # empty = no footer badge
+soon_minutes = 2            # countdowns up to this many minutes in the soon colour
+flash_blink = true          # blink once before the fade
+flash_fade_in = 0           # seconds for the box behind a changed countdown to fade in
+flash_fade_out = 3          # seconds for it to fade out
+font = "arial"              # "arial" or "segoe"
+now_style = "text"          # "text" = "jetzt"/"now" box, "dot" / "block" = yellow dot / square
+sign_font = ""              # your own LED-style font file in fonts/ for title + directions (not included)
+live_in_header = true       # "● LIVE ◔ 7s" next to the clock
+disruptions = true          # scroll the disruption text when a line can't run
+led_numbers = true          # minutes + line numbers as LED dot digits
+header = "columns"          # "columns" = clock + Linie / Abfahrt in Minuten, "station" = station name + clock
+badge_style = "outline"     # "outline" = frame, "fill" = solid badge
 
 [colors]
 clock = "#C8AAFF"
 footer = "#C8AAFF"
+flash = "#E3000F"           # box behind a changed countdown
+badge = "#FFFFFF"           # all line badges in one colour; empty = line colours
+badge_text = "#FFFFFF"      # line numbers; empty = automatic
+soon = "#FFCC00"            # countdowns up to soon_minutes, "now" dot
+sign = ""                   # title + directions; empty = white
+info = "#FF965A"            # disruption text
 ```
 
-With no `[[departures]]` at all, the display shows the first 4 lines of the station. Restart the display
+With no `[[departures]]` at all, the display shows the first 6 lines of the station. Restart the display
 after editing.
 
 ## Desktop launcher (`RunWienerLinienDisplay.exe` / `ExitWienerLinienDisplay.exe`)
