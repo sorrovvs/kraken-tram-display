@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-02
+
 ### Changed
 - The red LIVE dot slowly blinks (fades out and back in every 2 s, `LIVE_PULSE_S`)
 
