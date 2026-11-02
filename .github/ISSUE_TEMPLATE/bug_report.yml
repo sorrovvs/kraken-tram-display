@@ -1,0 +1,50 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Quit NZXT CAM
+        2. Run `python tram_lcd.py`
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log output
+      description: Run with `python.exe` (not `pythonw.exe`) and paste the output.
+      render: text
+  - type: input
+    id: device
+    attributes:
+      label: Kraken model & firmware
+      placeholder: "Kraken Z63, firmware 5.11.0"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS, Python and liquidctl version
+      placeholder: "Windows 11 24H2, Python 3.13, liquidctl 1.16.0"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: NZXT CAM was fully closed
+          required: true
+        - label: I read docs/TROUBLESHOOTING.md
+          required: true

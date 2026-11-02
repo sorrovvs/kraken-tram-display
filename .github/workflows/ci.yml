@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# No Kraken in CI: this checks that the code compiles and renders a preview from fixed sample data.
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r requirements.txt
+      - run: python -m py_compile tram_lcd.py
+      - name: Render preview
+        shell: python
+        run: |
+          import time, tram_lcd as t
+          from datetime import datetime, timedelta, timezone
+          now = datetime.now(timezone.utc)
+          rows = [{"line": "42", "towards": "Antonigasse", "times": [now + timedelta(minutes=m) for m in (0, 9)]},
+                  {"line": "9", "towards": "Westbahnhof S U", "times": [now + timedelta(minutes=m) for m in (3, 11)]}]
+          frames, _ = t.Animator().build(rows, time.time(), None, time.time(), 10)
+          assert len(frames) == 40, len(frames)
+          frames[0].save("preview.png")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview
+          path: preview.png
