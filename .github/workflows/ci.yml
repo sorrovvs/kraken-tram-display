@@ -28,8 +28,9 @@ jobs:
           now = datetime.now(timezone.utc)
           rows = [{"line": "42", "towards": "Antonigasse", "times": [now + timedelta(minutes=m) for m in (0, 9)]},
                   {"line": "9", "towards": "Westbahnhof S U", "times": [now + timedelta(minutes=m) for m in (3, 11)]}]
-          frames, _ = t.Animator().build(rows, time.time(), None, time.time(), 10)
-          assert len(frames) == 40, len(frames)
+          s = time.time()
+          frames, _ = t.Animator().build(rows, s, None, s, s + 10, s + 10)
+          assert len(frames) == 48, len(frames)  # 10 s + 2 s margin at 0.25 s per frame
           frames[0].save("preview.png")
       - uses: actions/upload-artifact@v4
         with:

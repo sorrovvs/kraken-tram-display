@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Flicker and countdowns briefly going back up: each GIF ran out about 1 s before the next one arrived, so
+  the Kraken looped back to the start of the cycle. GIFs now run past the expected next upload
+- Countdowns jumping between two minutes (4' → 5' → 4') because the live estimates wobble by ±30 s:
+  a countdown now goes up only once the new time is 30 s into the higher minute
+
 ## [1.3.0] - 2026-11-02
 
 ### Added

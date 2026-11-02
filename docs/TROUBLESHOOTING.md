@@ -73,3 +73,20 @@ of the box. `tram_lcd.py` patches three things at runtime. Nothing is installed 
    message. The patched version waits for the matching reply id (`command id + 1`, same sub-command).
 
 If a future liquidctl version fixes these, the patches can be removed.
+
+## The screen flickers / a countdown goes back up for a moment
+
+Fixed in the version after 1.3.0. There were two causes:
+
+- **The GIF ran out before the next one arrived.** Each refresh uploads one GIF, and the Kraken loops a GIF
+  when it reaches the end. The frames used to stop at the next refresh, but the next GIF only appears after
+  the next fetch + render + upload (about 1 s, more on a slow network). Meanwhile the Kraken replayed the
+  start of the cycle: the red blink again, and the countdown from 10 s earlier. Now each GIF runs past the
+  moment the next one is expected (the time is learned while running, plus 2 s margin).
+- **The live data wobbles.** Wiener Linien's real-time estimates move back and forth by up to about ±30 s
+  between polls, so a tram ~5 min away showed 4' → 5' → 4'. A countdown now goes up only once the new time
+  is at least 30 s into the higher minute (`HYSTERESIS_S` in `tram_lcd.py`). Real delays and the next
+  vehicle after a departure still show right away.
+
+To check the first one in `display.log`: each GIF lasts `frames × 0.25 s`, which should be longer than the
+time until the next "screen updated" line.

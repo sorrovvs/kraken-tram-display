@@ -28,7 +28,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -202,6 +202,8 @@ FADE_SECONDS = 3.0                         # red notification: one blink, then f
 _fade_n = round(FADE_SECONDS / FRAME_S)
 FADE_STEPS = (1.0, 0.0) + tuple(1.0 - i / _fade_n for i in range(_fade_n))
 BLINK_FRAMES = 2                           # "now" on/off every 2 frames = 0.5 s
+OVERRUN_MARGIN_S = 2.0                     # extra frames past the expected next GIF
+MAX_OVERRUN_S = 8.0                        # cap for the learned fetch+upload gap
 
 
 # --- liquidctl / winusbcdc workarounds -------------------------------------------
@@ -334,6 +336,33 @@ def select_rows(lines):
 
 def fetch():
     return [{**r, "times": r["times"][:3]} for r in select_rows(monitor_lines(CFG.diva))]
+
+
+HYSTERESIS_S = 30  # a countdown goes up only once the new time is this far into the higher minute
+
+
+def steady(rows, held, now=None):
+    """The real-time estimates wobble by up to about ±30 s between polls, which made countdowns
+    go 4' -> 5' -> 4' -> 5'. A countdown may now go up only when the new time is at least
+    HYSTERESIS_S into the higher minute (a real delay, or the next vehicle once this one has
+    left); until then the time is held at the end of the minute already shown. Going down is
+    always immediate. `held` keeps the times shown so far, per row."""
+    now = now or datetime.now(timezone.utc)
+    out = []
+    for r in rows:
+        key = (r["line"], r["towards"])
+        old = held.get(key, [])
+        times = []
+        for i, t in enumerate(r["times"]):
+            if i < len(old) and t > old[i]:
+                shown = max(0, int((old[i] - now).total_seconds() // 60))
+                new = (t - now).total_seconds()
+                if new // 60 > shown and new < (shown + 1) * 60 + HYSTERESIS_S:
+                    t = now + timedelta(seconds=(shown + 1) * 60 - 1)  # latest time still showing `shown`
+            times.append(t)
+        held[key] = times
+        out.append({**r, "times": times})
+    return out
 
 
 def stops_csv_path():
@@ -477,14 +506,31 @@ def render(view, flash=None, blink_on=True, refresh_in=None):
 
 
 class Animator:
-    """Builds the frames for one refresh cycle, remembering state across cycles."""
+    """Builds the frames for one refresh cycle, remembering state across cycles.
+
+    Each GIF runs a bit past the moment the next one is expected (see cmd_run), because the
+    Kraken loops a GIF that runs out - which would replay the start of the cycle: old, higher
+    countdowns and a second red blink. Since the next GIF usually replaces this one before
+    its last frames are shown, the state for the next cycle is taken from the frame that was
+    on screen when the new GIF appeared, not from the last frame drawn."""
 
     def __init__(self):
         self.prev = {}        # row key -> last shown next-departure text
         self.flash_age = {}   # row key -> frames since its number changed
+        self.history = []     # (frame time, prev, flash_age) for each frame of the last GIF
 
-    def build(self, rows, last_ok, error, start, cycle_s):
-        n = max(1, round(cycle_s / FRAME_S))
+    def build(self, rows, last_ok, error, start, refresh_at, next_at):
+        """Frames from `start` until the next GIF is expected on screen (`next_at`, unix seconds)
+        plus a safety margin. The status line counts down to `refresh_at`. Returns the frames and
+        the rows whose number changes before `next_at` (for the log)."""
+        end = next_at + OVERRUN_MARGIN_S
+        for at, prev, age in reversed(self.history):
+            if at <= start:
+                self.prev, self.flash_age = dict(prev), dict(age)
+                break
+        self.history = []
+
+        n = max(1, round((end - start) / FRAME_S))
         frames, flashed = [], set()
         for k in range(n):
             at = start + k * FRAME_S
@@ -493,15 +539,17 @@ class Animator:
             for key, nxt, *_ in view["rows"]:
                 if key in self.prev and self.prev[key] != nxt:
                     self.flash_age[key] = 0
-                    flashed.add(f"{key[0]} {key[1]}")
+                    if at < next_at:  # later frames are usually replaced before they show
+                        flashed.add(f"{key[0]} {key[1]}")
                 self.prev[key] = nxt
             flash = {key: FADE_STEPS[a] for key, a in self.flash_age.items() if a < len(FADE_STEPS)}
 
             blink_on = (k // BLINK_FRAMES) % 2 == 0
-            refresh_in = max(0, int(cycle_s - k * FRAME_S + 0.999))
+            refresh_in = max(0, int(refresh_at - at + 0.999))
             frames.append(render(view, flash, blink_on, refresh_in))
 
             self.flash_age = {key: a + 1 for key, a in self.flash_age.items() if a + 1 < len(FADE_STEPS)}
+            self.history.append((at, dict(self.prev), dict(self.flash_age)))
         return frames, flashed
 
 
@@ -532,6 +580,8 @@ def cmd_run(_args):
     log(f"station: {CFG.station} (DIVA {CFG.diva}), refresh every {CFG.refresh_seconds}s")
     dev, rows, last_ok, error = None, [], 0.0, None
     anim, lead_s, gif_ok = Animator(), 2.0, True
+    gap_s = 3.0  # cycle start -> new GIF on screen (fetch + render + upload), learned below
+    held = {}    # departure times shown so far, see steady()
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)  # stale request from an earlier stop
 
@@ -547,7 +597,7 @@ def cmd_run(_args):
         try:
             cycle_start = time.time()
             try:
-                rows, last_ok, error = fetch(), time.time(), None
+                rows, last_ok, error = steady(fetch(), held), time.time(), None
             except Exception as e:  # network/API problem: keep old data
                 error = e
                 log("fetch failed:", e)
@@ -558,8 +608,10 @@ def cmd_run(_args):
             # now + (render + upload time), learned from previous cycles
             t = time.time()
             show_at = t + lead_s
-            cycle_s = cycle_start + CFG.refresh_seconds - show_at
-            frames, flashed = anim.build(rows, last_ok, error, show_at, cycle_s)
+            refresh_at = cycle_start + CFG.refresh_seconds
+            # keep drawing until the next GIF is on screen (+ margin), so this one never loops
+            next_at = refresh_at + min(gap_s, MAX_OVERRUN_S)
+            frames, flashed = anim.build(rows, last_ok, error, show_at, refresh_at, next_at)
             try:
                 push(dev, frames, gif_ok)
             except NotSupportedByDriver:  # Kraken 2023 firmware 2.x: no GIFs, static only
@@ -568,6 +620,8 @@ def cmd_run(_args):
                 push(dev, frames, gif_ok)
             took = time.time() - t
             lead_s = 0.6 * lead_s + 0.4 * took
+            gap = time.time() - cycle_start
+            gap_s = max(gap, 0.8 * gap_s + 0.2 * gap)  # rises at once on a slow cycle, decays slowly
             log(f"screen updated, {len(frames)} frames, render+upload {took:.2f}s"
                 + (f", flash: {', '.join(sorted(flashed))}" if flashed else ""))
             if wait_until(cycle_start + CFG.refresh_seconds):
