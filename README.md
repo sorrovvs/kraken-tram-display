@@ -91,6 +91,7 @@ the cooler. Run `setup` again at any time to change station.
 | `python tram_lcd.py search <name>` | Find stations and their DIVA numbers |
 | `python tram_lcd.py lines <name or DIVA>` | List every line and direction departing at a station |
 | `python tram_lcd.py preview [-o file.png]` | Render one frame from live data, without a Kraken |
+| `python tram_lcd.py calibrate` | Measure how fast your Kraken really plays GIF frames and save it as `lcd_frame_ms` (stop the display first) |
 | `python tram_lcd.py stop` | Ask a running display to exit cleanly |
 | `--config <path>` | Use another config file, e.g. to switch between home and work stations |
 
@@ -127,6 +128,7 @@ now_text = ""            # replaces "jetzt"/"now"; empty = language default
 tilt = 0                 # degrees counter-clockwise (negative = clockwise)
 brightness = -1          # 0-100, -1 = leave unchanged
 refresh_seconds = 10     # data refresh interval (min 5)
+lcd_frame_ms = 250       # how long the Kraken really shows a GIF frame - measure: python tram_lcd.py calibrate
 footer = "© Sorrow"      # empty = no footer badge
 soon_minutes = 2            # countdowns up to this many minutes in the soon colour
 flash_blink = true          # blink once before the fade

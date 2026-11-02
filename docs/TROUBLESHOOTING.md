@@ -53,8 +53,14 @@ Some lines also don't run at night, so they won't show up then.
 
 ## The countdown runs too fast or too slow
 
-The Kraken may not play GIF frames at exactly the requested speed. Adjust `FRAME_S` (and with it the blink
-speed) in `tram_lcd.py`.
+The Kraken plays GIF frames slower than requested (250 ms each). Then everything on screen falls behind the
+clock, and each new upload makes the refresh seconds jump (e.g. 3s → 9s instead of 1s → 10s). Stop the
+display and run
+
+    python tram_lcd.py calibrate
+
+The Kraken counts frames; press Enter the moment it shows 100. The measured time per frame is saved as
+`lcd_frame_ms` in `config.toml`, and frames are then drawn for the moments they really appear.
 
 ---
 

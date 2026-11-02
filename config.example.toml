@@ -28,6 +28,7 @@ now_text = ""               # replaces "jetzt"/"now"; empty = language default
 tilt = 0                    # degrees counter-clockwise (negative = clockwise)
 brightness = -1             # 0-100, -1 = leave unchanged
 refresh_seconds = 10        # data refresh interval (min 5)
+lcd_frame_ms = 250         # how long the Kraken really shows a GIF frame - measure: python tram_lcd.py calibrate
 footer = "© Sorrow"         # empty = no footer badge
 soon_minutes = 2            # countdowns up to this many minutes in the soon colour
 flash_blink = true          # blink once before the fade

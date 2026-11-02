@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- The red LIVE dot slowly blinks (fades out and back in every 2 s, `LIVE_PULSE_S`)
+
+### Fixed
+- Parts of the screen flashing yellow for a moment: Pillow marked unchanged pixels with a "transparent"
+  palette colour, which the Kraken ignores and paints in that colour. GIFs are now saved without transparency
+- Refresh seconds stuck at "1s" or jumping (3s → 9s): the countdown now runs to the moment the next GIF
+  usually appears, so it goes 1s → 10s. The Kraken also plays frames slower than the 250 ms requested, so
+  frames are drawn `lcd_frame_ms` apart (new option, measured with the new `calibrate` command)
+
 ## [1.4.0] - 2026-11-02
 
 ### Added

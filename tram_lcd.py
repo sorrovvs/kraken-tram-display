@@ -7,6 +7,7 @@ Commands:
   python tram_lcd.py search NAME       find stations by name
   python tram_lcd.py lines STATION     list lines/directions departing at a station (name or DIVA)
   python tram_lcd.py preview [-o F]    render one frame to a PNG (no Kraken needed)
+  python tram_lcd.py calibrate         measure how fast the Kraken plays GIF frames (stop the display first)
 
 Options:
   --config PATH                        use another config file (default: config.toml next to this script)
@@ -64,6 +65,7 @@ class Config:
     tilt: float = 0.0
     brightness: int | None = None
     refresh_seconds: int = 10
+    lcd_frame_ms: int = 250                          # how long the Kraken really shows a GIF frame (calibrate)
     footer: str = "© Sorrow"
     clock_color: tuple = (200, 170, 255)
     footer_color: tuple = (200, 170, 255)
@@ -113,6 +115,7 @@ class Config:
         c.flash_color = hex_rgb(col.get("flash"), c.flash_color)
         c.badge_color = None if col.get("badge") == "" else hex_rgb(col.get("badge"), c.badge_color)
         c.flash_blink = bool(disp.get("flash_blink", True))
+        c.lcd_frame_ms = min(2000, max(50, int(disp.get("lcd_frame_ms", c.lcd_frame_ms))))
         c.flash_fade_in = max(0.0, float(disp.get("flash_fade_in", c.flash_fade_in)))
         c.flash_fade_out = max(FRAME_S, float(disp.get("flash_fade_out", c.flash_fade_out)))
         c.soon_color = hex_rgb(col.get("soon"), c.soon_color)
@@ -169,6 +172,7 @@ class Config:
             "             # 0-100, -1 = leave unchanged",
             f"refresh_seconds = {self.refresh_seconds}        # data refresh interval (min 5)",
             f"footer = {q(self.footer)}         # empty = no footer badge",
+            f"lcd_frame_ms = {self.lcd_frame_ms}         # how long the Kraken really shows a frame: python tram_lcd.py calibrate",
             f"soon_minutes = {self.soon_minutes}            # countdowns up to this many minutes in the soon colour",
             f"flash_blink = {'true' if self.flash_blink else 'false'}        # blink once before the fade",
             f"flash_fade_in = {self.flash_fade_in:g}           # seconds for the box to fade in",
@@ -283,14 +287,22 @@ def font_from(names, size):
 # animation: one GIF per refresh cycle, every frame drawn for its own moment in time
 FRAME_S = 0.25                             # GIF frame length
 BLINK_FRAMES = 2                           # "now" on/off every 2 frames = 0.5 s
+def lcd_frame_s():
+    """Seconds the Kraken really shows each GIF frame. It plays slower than the FRAME_S written into the
+    GIF, so frames are drawn this far apart in time - otherwise everything on screen falls behind the
+    clock and the next upload makes the countdown jump (3s -> 9s). Measured by `calibrate`."""
+    return CFG.lcd_frame_ms / 1000
+
+
+LIVE_PULSE_S = 2.0                         # the red LIVE dot fades out and back in once per 2 s
 OVERRUN_MARGIN_S = 2.0                     # extra frames past the expected next GIF
 MAX_OVERRUN_S = 8.0                        # cap for the learned fetch+upload gap
 
 
 def flash_steps():
     """Box intensity (0..1) for each frame after a countdown changes: fade in, optional blink, fade out."""
-    n_in = round(CFG.flash_fade_in / FRAME_S)
-    n_out = max(1, round(CFG.flash_fade_out / FRAME_S))
+    n_in = round(CFG.flash_fade_in / lcd_frame_s())
+    n_out = max(1, round(CFG.flash_fade_out / lcd_frame_s()))
     fade_in = tuple(i / n_in for i in range(1, n_in))  # the fade-out starts at full
     blink = (1.0, 0.0) if CFG.flash_blink else ()
     return fade_in + blink + tuple(1.0 - i / n_out for i in range(n_out))
@@ -920,10 +932,11 @@ LAYOUTS = {
 }
 
 
-def render(view, flash=None, blink_on=True, refresh_in=None):
+def render(view, flash=None, blink_on=True, refresh_in=None, live_pulse=1.0):
     """flash: {row_key: 0..1} intensity of the box behind a next-departure number that just changed.
     blink_on=False hides every "now" (off phase of the blink).
-    refresh_in: seconds until the next data refresh, shown in the status line."""
+    refresh_in: seconds until the next data refresh, shown in the status line.
+    live_pulse: 0..1 brightness of the red LIVE dot (it slowly blinks)."""
     flash = flash or {}
     img = Image.new("RGB", (SIZE, SIZE), BG)
     d = ImageDraw.Draw(img)
@@ -956,7 +969,7 @@ def render(view, flash=None, blink_on=True, refresh_in=None):
         cy = clock_y
         d.text((x, cy), view["clock"], font=f_clock, fill=CFG.clock_color, anchor="lm")
         x += w_clock + 12
-        d.ellipse((x, cy - r, x + 2 * r, cy + r), fill=RED)
+        d.ellipse((x, cy - r, x + 2 * r, cy + r), fill=mix(BG, RED, 0.15 + 0.85 * live_pulse))
         d.text((x + 2 * r + 5, cy), "LIVE", font=f_live, fill=CFG.clock_color, anchor="lm")
         if secs:  # loading ring: fills up until the next refresh
             x += 2 * r + 5 + w_live + 12
@@ -1117,9 +1130,10 @@ class Animator:
         self.flash_age = {}   # row key -> frames since its number changed
         self.history = []     # (frame time, prev, flash_age) for each frame of the last GIF
 
-    def build(self, rows, last_ok, error, start, refresh_at, next_at):
-        """Frames from `start` until the next GIF is expected on screen (`next_at`, unix seconds)
-        plus a safety margin. The status line counts down to `refresh_at`. Returns the frames and
+    def build(self, rows, last_ok, error, start, swap_at, next_at):
+        """Frames from `start` until the next GIF is expected on screen at the latest (`next_at`, unix
+        seconds) plus a safety margin. The refresh countdown runs to `swap_at`, when the next GIF
+        usually appears. Returns the frames and
         the rows whose number changes before `next_at` (for the log)."""
         end = next_at + OVERRUN_MARGIN_S
         for at, prev, age in reversed(self.history):
@@ -1128,10 +1142,12 @@ class Animator:
                 break
         self.history = []
 
-        n = max(1, round((end - start) / FRAME_S))
+        step = lcd_frame_s()
+        blink_frames = max(1, round(BLINK_FRAMES * FRAME_S / step))  # "now" blink stays ~0.5 s per phase
+        n = max(1, round((end - start) / step))
         frames, flashed = [], set()
         for k in range(n):
-            at = start + k * FRAME_S
+            at = start + k * step
             view = build_view(rows, at - last_ok if last_ok else 1e9, error, at)
 
             for key, nxt, *_ in view["rows"]:
@@ -1143,9 +1159,16 @@ class Animator:
             steps = flash_steps()
             flash = {key: steps[a] for key, a in self.flash_age.items() if a < len(steps)}
 
-            blink_on = (k // BLINK_FRAMES) % 2 == 0
-            refresh_in = max(0.0, refresh_at - at)  # seconds, fractional (drives the refresh ring)
-            frames.append(render(view, flash, blink_on, refresh_in))
+            blink_on = (k // blink_frames) % 2 == 0
+            # seconds until the next GIF is on screen, fractional (drives the refresh ring): the old GIF
+            # reaches 0 when the new one appears, and the new one starts at refresh_seconds (1s -> 10s).
+            # Frames past that are only shown if the upload is late; they start the next round
+            refresh_in = swap_at - at
+            if refresh_in <= 0:
+                refresh_in = max(0.0, refresh_in + CFG.refresh_seconds)
+            # absolute time, so the blink carries on smoothly from one GIF to the next
+            live_pulse = 0.5 + 0.5 * math.cos(2 * math.pi * (at % LIVE_PULSE_S) / LIVE_PULSE_S)
+            frames.append(render(view, flash, blink_on, refresh_in, live_pulse))
 
             self.flash_age = {key: a + 1 for key, a in self.flash_age.items() if a + 1 < len(steps)}
             self.history.append((at, dict(self.prev), dict(self.flash_age)))
@@ -1173,6 +1196,7 @@ def shared_palette(frames):
         mosaic.paste(f, (0, SIZE * i))
     # colours that may not be in the sampled frames: the change box fading, "now" marks
     swatch = [mix(BG, CFG.flash_color, i / 8) for i in range(1, 9)] + [CFG.soon_color, GREEN, RED, FG, DIM]
+    swatch += [mix(BG, RED, 0.15 + 0.85 * i / 6) for i in range(6)]  # the LIVE dot pulsing
     d = ImageDraw.Draw(mosaic)
     for i, c in enumerate(swatch):
         d.rectangle((i * 8, SIZE * len(sample), i * 8 + 7, SIZE * len(sample) + 7), fill=c)
@@ -1184,8 +1208,11 @@ def push(dev, frames, gif_ok):
     dev.device.clear_enqueued_reports()
     if gif_ok:
         frames = shared_palette(frames)
+        # optimize=False: otherwise Pillow marks unchanged pixels with a "transparent" palette index.
+        # The Kraken ignores GIF transparency and paints that index's real colour - often one of the
+        # yellows - so parts of the screen flashed yellow for a frame. disposal=1: draw over the last frame.
         frames[0].save(GIF_OUT, save_all=True, append_images=frames[1:],
-                       duration=int(FRAME_S * 1000), loop=0)
+                       duration=int(FRAME_S * 1000), loop=0, optimize=False, disposal=1)
         dev.set_screen("lcd", "gif", GIF_OUT)
     else:
         frames[0].save(PNG_OUT)
@@ -1200,6 +1227,7 @@ def cmd_run(_args):
     dev, rows, last_ok, error = None, [], 0.0, None
     anim, lead_s, gif_ok = Animator(), 2.0, True
     gap_s = 3.0  # cycle start -> new GIF on screen (fetch + render + upload), learned below
+    swap_s = 1.5  # the same, typical value (gap_s is the cautious one), for the refresh countdown
     held = {}    # departure times shown so far, see steady()
     global LEARNER
     LEARNER = DepartureLearner()
@@ -1234,7 +1262,8 @@ def cmd_run(_args):
             refresh_at = cycle_start + CFG.refresh_seconds
             # keep drawing until the next GIF is on screen (+ margin), so this one never loops
             next_at = refresh_at + min(gap_s, MAX_OVERRUN_S)
-            frames, flashed = anim.build(rows, last_ok, error, show_at, refresh_at, next_at)
+            swap_at = refresh_at + swap_s  # countdown hits 0 when the next GIF usually appears
+            frames, flashed = anim.build(rows, last_ok, error, show_at, swap_at, next_at)
             try:
                 push(dev, frames, gif_ok)
             except NotSupportedByDriver:  # Kraken 2023 firmware 2.x: no GIFs, static only
@@ -1245,6 +1274,7 @@ def cmd_run(_args):
             lead_s = 0.6 * lead_s + 0.4 * took
             gap = time.time() - cycle_start
             gap_s = max(gap, 0.8 * gap_s + 0.2 * gap)  # rises at once on a slow cycle, decays slowly
+            swap_s = 0.7 * swap_s + 0.3 * min(gap, MAX_OVERRUN_S)
             log(f"screen updated, {len(frames)} frames, render+upload {took:.2f}s"
                 + (f", flash: {', '.join(sorted(flashed))}" if flashed else ""))
             if wait_until(cycle_start + CFG.refresh_seconds):
@@ -1399,6 +1429,56 @@ def cmd_lines(args):
     print_lines(sorted(monitor_lines(diva), key=line_sort_key))
 
 
+CALIBRATE_FRAMES, CALIBRATE_MARK = 200, 100
+
+
+def cmd_calibrate(args):
+    """Shows a frame counter on the Kraken; the user presses Enter when it reaches CALIBRATE_MARK.
+    Real time / frames = how long the Kraken really shows a frame -> lcd_frame_ms in the config."""
+    import re
+
+    dev = connect_kraken(_patch_liquidctl())
+    try:
+        frames = []
+        f_big, f_small = font(True, 110), font(False, 18)
+        for k in range(CALIBRATE_FRAMES):
+            img = Image.new("RGB", (SIZE, SIZE), BG)
+            d = ImageDraw.Draw(img)
+            d.text((SIZE // 2, SIZE // 2), str(k), font=f_big, fill=CFG.soon_color if k >= CALIBRATE_MARK else FG,
+                   anchor="mm")
+            d.text((SIZE // 2, SIZE // 2 + 85), f"Enter at {CALIBRATE_MARK}", font=f_small, fill=DIM, anchor="mm")
+            frames.append(img)
+        push(dev, frames, True)
+        start = time.time()
+        input(f"The Kraken now counts frames. Press Enter the moment it shows {CALIBRATE_MARK}... ")
+        took = time.time() - start
+    finally:
+        try:
+            dev.set_screen("lcd", "liquid", None)
+        except Exception:
+            pass
+        close_kraken(dev)
+
+    ms = round(took / CALIBRATE_MARK * 1000)
+    print(f"{CALIBRATE_MARK} frames took {took:.1f} s: the Kraken shows each frame for about {ms} ms "
+          f"(requested: {int(FRAME_S * 1000)} ms).")
+    if not 50 <= ms <= 2000:
+        print("That doesn't look right - config not changed. Try again.")
+        return 1
+    with open(args.config, encoding="utf-8") as f:
+        text = f.read()
+    line = f"lcd_frame_ms = {ms}         # how long the Kraken really shows a frame: python tram_lcd.py calibrate"
+    if re.search(r"(?m)^lcd_frame_ms\s*=.*$", text):
+        text = re.sub(r"(?m)^lcd_frame_ms\s*=.*$", lambda _: line, text)
+    elif re.search(r"(?m)^\[display\]\s*$", text):
+        text = re.sub(r"(?m)^\[display\]\s*$", lambda m: m.group(0) + "\n" + line, text, count=1)
+    else:
+        text += f"\n[display]\n{line}\n"
+    with open(args.config, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(f"Saved lcd_frame_ms = {ms} in {args.config}. Restart the display.")
+
+
 def cmd_stop(_args):
     open(STOP_FILE, "w").close()
     print("Stop requested - a running display exits within a few seconds.")
@@ -1410,6 +1490,7 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("run", help="run the display (default)")
     sub.add_parser("stop", help="ask a running display to exit cleanly")
+    sub.add_parser("calibrate", help="measure how fast the Kraken plays GIF frames (stop the display first)")
     p = sub.add_parser("setup", help="interactive setup")
     p.add_argument("station", nargs="?", help="station name to start the search with")
     p = sub.add_parser("search", help="find stations by name")
@@ -1436,6 +1517,8 @@ def main(argv=None):
     CFG = Config.load(args.config)
     if args.cmd == "preview":
         return cmd_preview(args)
+    if args.cmd == "calibrate":
+        return cmd_calibrate(args)
     return cmd_run(args)
 
 
