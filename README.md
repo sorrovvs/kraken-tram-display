@@ -128,24 +128,31 @@ footer = "#C8AAFF"
 With no `[[departures]]` at all, the display shows the first 4 lines of the station. Restart the display
 after editing.
 
-## Desktop launcher (`RunWienerLinienDisplay.exe`)
+## Desktop launcher (`RunWienerLinienDisplay.exe` / `ExitWienerLinienDisplay.exe`)
 
-A double-click launcher for Windows. Build it once. It uses the C# compiler that ships with Windows, so
-there's nothing extra to install:
+Double-click buttons for Windows to start and stop the display. Build them once. They use the C#
+compiler that ships with Windows, so there's nothing extra to install:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File launcher\build.ps1 -Desktop
 ```
 
-This creates `RunWienerLinienDisplay.exe` in the project folder and copies it to your desktop. Each
-double-click:
+This creates both `.exe` files in the project folder and copies them to your desktop.
+
+Each double-click on **`RunWienerLinienDisplay.exe`**:
 
 1. closes NZXT CAM,
 2. stops a display that is already running, cleanly between two uploads (so clicking again = restart),
 3. starts the display in the background, without a window, and logs to `display.log`.
 
-If there's no `config.toml` yet, it opens the setup wizard instead. To stop the display, run
-`python tram_lcd.py stop`.
+If there's no `config.toml` yet, it opens the setup wizard instead.
+
+**`ExitWienerLinienDisplay.exe`** (same icon, with a cross) stops the display cleanly between two
+uploads, and the Kraken LCD goes back to showing the liquid temperature. If the display doesn't exit
+within 15 s, it is force-closed. From a terminal, `python tram_lcd.py stop` does the same.
+
+The exit icon is generated from `launcher\icon.ico` by `launcher\make_exit_icon.py` (needs Pillow, which
+is in the venv already).
 
 ## Start automatically at login
 
