@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-02
+
+### Fixed
+- Refresh seconds briefly showing 11s (10s → 11s → 9s) when the timing estimates came out a little over the
+  refresh interval: the countdown never goes above `refresh_seconds` now
+
 ## [1.4.1] - 2026-11-02
 
 ### Changed

@@ -1166,6 +1166,7 @@ class Animator:
             refresh_in = swap_at - at
             if refresh_in <= 0:
                 refresh_in = max(0.0, refresh_in + CFG.refresh_seconds)
+            refresh_in = min(refresh_in, float(CFG.refresh_seconds))  # timing estimates are a bit off: never 11s
             # absolute time, so the blink carries on smoothly from one GIF to the next
             live_pulse = 0.5 + 0.5 * math.cos(2 * math.pi * (at % LIVE_PULSE_S) / LIVE_PULSE_S)
             frames.append(render(view, flash, blink_on, refresh_in, live_pulse))
