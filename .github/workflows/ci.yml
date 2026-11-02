@@ -18,6 +18,8 @@ jobs:
       - run: python -m py_compile tram_lcd.py
       - name: Render preview
         shell: python
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           import time, tram_lcd as t
           from datetime import datetime, timedelta, timezone
