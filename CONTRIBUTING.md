@@ -11,7 +11,7 @@ Thanks for wanting to help! This is a small hobby project, so the process is lig
 ## Development setup
 
 ```powershell
-git clone https://github.com/<your-user>/kraken-tram-display.git
+git clone https://github.com/sorrovvs/kraken-tram-display.git
 cd kraken-tram-display
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt

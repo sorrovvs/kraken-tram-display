@@ -40,7 +40,7 @@ Wiener Linien open data API. It is easy to change it to any other stop and lines
 ## Installation
 
 ```powershell
-git clone https://github.com/<your-user>/kraken-tram-display.git
+git clone https://github.com/sorrovvs/kraken-tram-display.git
 cd kraken-tram-display
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
