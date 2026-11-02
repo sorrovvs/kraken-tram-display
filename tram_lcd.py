@@ -208,7 +208,13 @@ BLINK_FRAMES = 2                           # "now" on/off every 2 frames = 0.5 s
 # See docs/TROUBLESHOOTING.md for details. Imported lazily so setup/search/preview
 # work without liquidctl talking to any hardware.
 def _patch_liquidctl():
+    import liquidctl.driver.kraken3 as kraken3
     from liquidctl.driver.kraken3 import KrakenZ3
+
+    # Other programs (e.g. SignalRGB) also talk to the Kraken; it answers them with
+    # ff01 messages that land in our queue. liquidctl gives up after 12 messages,
+    # which isn't enough when that traffic is busy.
+    kraken3._MAX_READ_ATTEMPTS = 100
 
     if sys.platform == "win32":
         # winusbcdc 1.7 only returns devices when a vid/pid filter is passed, but
@@ -225,7 +231,7 @@ def _patch_liquidctl():
     def write_then_read_matching(self, data):
         self._write(data)
         want = bytes([data[0] + 1, data[1]])
-        for _ in range(40):
+        for _ in range(100):
             msg = self._read()
             if bytes(msg[0:2]) == want:
                 return msg
@@ -500,6 +506,10 @@ class Animator:
 
 
 # --- run ------------------------------------------------------------------------
+# Creating this file asks a running display to exit cleanly between uploads (used by the
+# desktop launcher and `tram_lcd.py stop`). Killing it mid-upload can leave the Kraken LCD
+# waiting for the rest of a transfer for about a minute.
+STOP_FILE = os.path.join(HERE, "stop.request")
 GIF_OUT = os.path.join(tempfile.gettempdir(), "kraken_tram.gif")
 PNG_OUT = os.path.join(tempfile.gettempdir(), "kraken_tram.png")
 
@@ -522,6 +532,16 @@ def cmd_run(_args):
     log(f"station: {CFG.station} (DIVA {CFG.diva}), refresh every {CFG.refresh_seconds}s")
     dev, rows, last_ok, error = None, [], 0.0, None
     anim, lead_s, gif_ok = Animator(), 2.0, True
+    if os.path.exists(STOP_FILE):
+        os.remove(STOP_FILE)  # stale request from an earlier stop
+
+    def wait_until(deadline):
+        """Sleep until `deadline`; returns True if a stop was requested meanwhile."""
+        while time.time() < deadline:
+            if os.path.exists(STOP_FILE):
+                return True
+            time.sleep(0.2)
+        return os.path.exists(STOP_FILE)
 
     while True:
         try:
@@ -550,7 +570,8 @@ def cmd_run(_args):
             lead_s = 0.6 * lead_s + 0.4 * took
             log(f"screen updated, {len(frames)} frames, render+upload {took:.2f}s"
                 + (f", flash: {', '.join(sorted(flashed))}" if flashed else ""))
-            time.sleep(max(0, cycle_start + CFG.refresh_seconds - time.time()))
+            if wait_until(cycle_start + CFG.refresh_seconds):
+                break
         except KeyboardInterrupt:
             break
         except Exception:
@@ -558,8 +579,12 @@ def cmd_run(_args):
             if dev:
                 close_kraken(dev)
             dev = None
-            time.sleep(10)
+            if wait_until(time.time() + 10):
+                break
 
+    log("stopping")
+    if os.path.exists(STOP_FILE):
+        os.remove(STOP_FILE)
     if dev:
         try:
             dev.set_screen("lcd", "liquid", None)  # back to liquid temperature
@@ -697,11 +722,17 @@ def cmd_lines(args):
     print_lines(sorted(monitor_lines(diva), key=line_sort_key))
 
 
+def cmd_stop(_args):
+    open(STOP_FILE, "w").close()
+    print("Stop requested - a running display exits within a few seconds.")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Live Wiener Linien departures on an NZXT Kraken LCD.")
     ap.add_argument("--config", default=DEFAULT_CONFIG, help="config file (default: config.toml)")
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("run", help="run the display (default)")
+    sub.add_parser("stop", help="ask a running display to exit cleanly")
     p = sub.add_parser("setup", help="interactive setup")
     p.add_argument("station", nargs="?", help="station name to start the search with")
     p = sub.add_parser("search", help="find stations by name")
@@ -718,6 +749,8 @@ def main(argv=None):
         return cmd_search(args)
     if args.cmd == "lines":
         return cmd_lines(args)
+    if args.cmd == "stop":
+        return cmd_stop(args)
 
     global CFG
     if not os.path.exists(args.config):

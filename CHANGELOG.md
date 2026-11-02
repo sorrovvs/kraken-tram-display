@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-11-02
+
+### Added
+- Desktop launcher `RunWienerLinienDisplay.exe` (source in `launcher/`, built with `launcher\build.ps1`):
+  closes NZXT CAM, restarts a running display cleanly, runs hidden and logs to `display.log`
+- `python tram_lcd.py stop`: asks a running display to exit between uploads
+
+### Fixed
+- Uploads failing with "missing messages" while other software (e.g. SignalRGB) talks to the Kraken
+
 ## [1.1.0] - 2026-11-02
 
 ### Added

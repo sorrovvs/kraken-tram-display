@@ -89,6 +89,7 @@ the cooler. Run `setup` again at any time to change station.
 | `python tram_lcd.py search <name>` | Find stations and their DIVA numbers |
 | `python tram_lcd.py lines <name or DIVA>` | List every line and direction departing at a station |
 | `python tram_lcd.py preview [-o file.png]` | Render one frame from live data, without a Kraken |
+| `python tram_lcd.py stop` | Ask a running display to exit cleanly |
 | `--config <path>` | Use another config file, e.g. to switch between home and work stations |
 
 Use `pythonw.exe` instead of `python.exe` to run without a console window.
@@ -127,10 +128,29 @@ footer = "#C8AAFF"
 With no `[[departures]]` at all, the display shows the first 4 lines of the station. Restart the display
 after editing.
 
+## Desktop launcher (`RunWienerLinienDisplay.exe`)
+
+A double-click launcher for Windows. Build it once. It uses the C# compiler that ships with Windows, so
+there's nothing extra to install:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File launcher\build.ps1 -Desktop
+```
+
+This creates `RunWienerLinienDisplay.exe` in the project folder and copies it to your desktop. Each
+double-click:
+
+1. closes NZXT CAM,
+2. stops a display that is already running, cleanly between two uploads (so clicking again = restart),
+3. starts the display in the background, without a window, and logs to `display.log`.
+
+If there's no `config.toml` yet, it opens the setup wizard instead. To stop the display, run
+`python tram_lcd.py stop`.
+
 ## Start automatically at login
 
-`start-hidden.vbs` starts the display without a window. Put a shortcut to it in your Startup folder
-(press `Win+R` and type `shell:startup`):
+`start-hidden.vbs` starts the display without a window. Put a shortcut to it (or to the
+desktop launcher) in your Startup folder (press `Win+R` and type `shell:startup`):
 
 ```powershell
 $ws = New-Object -ComObject WScript.Shell

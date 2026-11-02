@@ -16,12 +16,20 @@ a line like:
 
 ## `OSError: read error` or `missing messages`
 
-Another program is talking to the Kraken (usually CAM, or a second copy of this script). Make sure only one
-copy is running:
+Another program is talking to the Kraken: usually CAM, an RGB tool like **SignalRGB**, or a second copy of
+this script. Make sure only one copy is running:
 
 ```powershell
-Get-Process python*, NZXT* | Select-Object ProcessName, Id
+Get-Process python*, NZXT*, SignalRgb* | Select-Object ProcessName, Id
 ```
+
+The script tolerates some traffic from RGB tools. If the errors keep coming, turn off the Kraken in that
+tool's device list.
+
+## The display stopped working after it was force-closed
+
+If the display is killed in the middle of an upload, the Kraken LCD can stay busy for about a minute. Stop
+it with `python tram_lcd.py stop`, or with the desktop launcher, which both wait for the current upload to finish.
 
 ## Text is cut off at the edge
 

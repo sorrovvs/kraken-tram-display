@@ -7,6 +7,11 @@ __pycache__/
 # Personal settings (created by `python tram_lcd.py setup`)
 config.toml
 
+# Launcher build output and runtime files
+*.exe
+display.log
+stop.request
+
 # Local previews / scratch output
 preview*.png
 stops.csv
