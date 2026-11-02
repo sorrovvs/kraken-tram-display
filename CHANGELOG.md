@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- "jetzt"/"now" appears only while the tram is expected at the stop (20 s before it really leaves,
+  `NOW_WINDOW_S`) instead of for the whole last minute; until then the countdown shows 1'. When a tram
+  really leaves is learned per line and direction: Wiener Linien drops a vehicle from the data once it has
+  left, and the average difference to the estimate is kept in `departure_offsets.json`
+
 ### Fixed
 - Flicker and countdowns briefly going back up: each GIF ran out about 1 s before the next one arrived, so
   the Kraken looped back to the start of the cycle. GIFs now run past the expected next upload

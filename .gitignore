@@ -11,6 +11,7 @@ config.toml
 *.exe
 display.log
 stop.request
+departure_offsets.json
 
 # Local previews / scratch output
 preview*.png

@@ -21,7 +21,9 @@ your station and lines in under a minute.
 - **Real-time departures**: the next vehicle and the one after it
 - **Line colours**: U1–U6 in their official colours, plus trams, buses, S-Bahn and WLB
 - **Animated notifications**: when a countdown changes, a red box blinks once and then fades over 3 s
-- **Blinking "jetzt" / "now"** on a green background when a vehicle is arriving
+- **Blinking "jetzt" / "now"** on a green background while the vehicle is at the stop. The display learns
+  per line how early or late vehicles really leave compared with the live estimate (stored in
+  `departure_offsets.json`), so "now" doesn't show while the tram is still a minute away
 - **Refresh countdown**: the bottom line shows the seconds until the next data refresh
 - **German or English** labels
 - **Tilt compensation** for pumps mounted at an angle

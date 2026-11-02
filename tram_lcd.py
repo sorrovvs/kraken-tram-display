@@ -365,6 +365,68 @@ def steady(rows, held, now=None):
     return out
 
 
+NOW_WINDOW_S = 20  # "now" shows this long before the tram really leaves (about its time at the stop)
+OFFSETS_FILE = os.path.join(HERE, "departure_offsets.json")
+
+
+class DepartureLearner:
+    """Learns, per row, how far real departures are from the live estimate.
+
+    Wiener Linien drops a vehicle from the data once it has left, so when the first departure
+    disappears (and the second one moves up), we know to within one refresh when it really left.
+    The average difference is kept in departure_offsets.json, so it survives restarts."""
+
+    ALPHA = 0.25                    # weight of a new sample in the running average
+    SAMPLE_RANGE = (-120.0, 90.0)   # outside: a cancellation or data glitch, not a departure
+
+    def __init__(self, path=OFFSETS_FILE):
+        self.path = path
+        try:
+            with open(path, encoding="utf-8") as f:
+                self.offsets = {k: float(v) for k, v in json.load(f).items()}
+        except (OSError, ValueError, AttributeError):
+            self.offsets = {}
+        self.last = {}  # row key -> (fetch time, first two estimated departures)
+
+    @staticmethod
+    def name(key):
+        return f"{key[0]} {key[1]}"
+
+    def offset(self, key):
+        """Seconds to add to the estimate to get the real departure (negative = leaves early)."""
+        return self.offsets.get(self.name(key), 0.0)
+
+    def update(self, rows, fetched_at):
+        """rows: the raw fetch() result, before steady()."""
+        for r in rows:
+            key, times = (r["line"], r["towards"]), r["times"][:2]
+            prev = self.last.get(key)
+            if prev and times and len(prev[1]) > 1:
+                prev_at, (p_first, p_second) = prev
+                if times[0] - p_first > timedelta(seconds=90) and abs(times[0] - p_second) < timedelta(seconds=90):
+                    left_at = (prev_at + fetched_at) / 2  # it left between the two fetches
+                    sample = left_at - p_first.timestamp()
+                    if self.SAMPLE_RANGE[0] <= sample <= self.SAMPLE_RANGE[1]:
+                        n = self.name(key)
+                        old = self.offsets.get(n)
+                        self.offsets[n] = sample if old is None else (1 - self.ALPHA) * old + self.ALPHA * sample
+                        log(f"{n} left {abs(sample):.0f}s {'before' if sample < 0 else 'after'} the estimate, "
+                            f"average now {self.offsets[n]:+.0f}s")
+                        self.save()
+            if times:
+                self.last[key] = (fetched_at, times)
+
+    def save(self):
+        try:
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump({k: round(v, 1) for k, v in self.offsets.items()}, f, indent=2)
+        except OSError:
+            pass
+
+
+LEARNER = None  # set by cmd_run; preview and tests run without one
+
+
 def stops_csv_path():
     base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".cache")
     folder = os.path.join(base, "kraken-tram-display")
@@ -426,14 +488,17 @@ def build_view(rows, data_age, error, at=None):
     now = datetime.fromtimestamp(at, timezone.utc)
     out = []
     for r in rows[:MAX_ROWS]:
+        key = (r["line"], r["towards"])
         mins = [max(0, int((t - now).total_seconds() // 60)) for t in r["times"]]
         if mins:
-            nxt = tr("now") if mins[0] == 0 else f"{mins[0]}'"
+            # "now" only while the tram is expected at the stop; until then at least 1'
+            leaves_in = (r["times"][0] - now).total_seconds() + (LEARNER.offset(key) if LEARNER else 0.0)
+            nxt = tr("now") if leaves_in <= NOW_WINDOW_S else f"{max(1, mins[0])}'"
             col = SOON if mins[0] <= 2 else FG
         else:
             nxt, col = "–", DIM
         later = f"{mins[1]}'" if len(mins) > 1 else ""
-        out.append(((r["line"], r["towards"]), nxt, col, later, r.get("type", "")))
+        out.append((key, nxt, col, later, r.get("type", "")))
 
     if error and not rows:
         status = (tr("offline"), RED)
@@ -582,6 +647,8 @@ def cmd_run(_args):
     anim, lead_s, gif_ok = Animator(), 2.0, True
     gap_s = 3.0  # cycle start -> new GIF on screen (fetch + render + upload), learned below
     held = {}    # departure times shown so far, see steady()
+    global LEARNER
+    LEARNER = DepartureLearner()
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)  # stale request from an earlier stop
 
@@ -597,7 +664,9 @@ def cmd_run(_args):
         try:
             cycle_start = time.time()
             try:
-                rows, last_ok, error = steady(fetch(), held), time.time(), None
+                raw = fetch()
+                LEARNER.update(raw, time.time())
+                rows, last_ok, error = steady(raw, held), time.time(), None
             except Exception as e:  # network/API problem: keep old data
                 error = e
                 log("fetch failed:", e)
