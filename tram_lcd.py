@@ -71,6 +71,7 @@ class Config:
     clock_color: tuple = (200, 170, 255)
     footer_color: tuple = (200, 170, 255)
     flash_color: tuple = (227, 0, 15)                # box behind a countdown that just changed
+    flash_style: str = "glow"                        # "glow" = digits light up, "soft" = soft box, "box", "none"
     flash_blink: bool = True                         # blink once before fading
     flash_fade_in: float = 0.0                       # seconds for the box to fade in (0 = at once)
     flash_fade_out: float = 3.0                      # seconds for the box to fade out
@@ -81,7 +82,11 @@ class Config:
     now_style: str = "text"                          # "text" = green "jetzt"/"now" box, "dot" / "block" = yellow dot / square
     sign_font: str = ""                              # LED-style font file for title + directions (in fonts/)
     sign_color: tuple | None = None                  # colour for title + directions; None = white
-    live_in_header: bool = True                      # "● LIVE ◔ 7s" next to the clock instead of the status line
+    live_in_header: bool = True                      # "● LIVE ◔" next to the clock instead of the status line
+    show_live: bool = True                           # false: no LIVE / refresh ring at all, just a bigger clock
+    clock_style: str = "plain"                       # "flip": wide digits on flip cards (clock-only header)
+    clock_font: str = ""                             # flip clock font file[:variation], e.g. "bahnschrift.ttf:SemiBold"; empty = sign_font
+    clock_card_color: tuple | None = None            # flip cards; None = a dark tint of the clock colour
     disruptions: bool = True                         # scroll the disruption text when a line can't run
     disruptions_all: bool = False                    # also minor ones (irregular intervals, delays)
     info_color: tuple = (255, 150, 90)               # colour of that text
@@ -117,6 +122,9 @@ class Config:
         c.flash_color = hex_rgb(col.get("flash"), c.flash_color)
         c.badge_color = None if col.get("badge") == "" else hex_rgb(col.get("badge"), c.badge_color)
         c.flash_blink = bool(disp.get("flash_blink", True))
+        c.flash_style = str(disp.get("flash_style", c.flash_style)).lower()
+        if c.flash_style not in ("glow", "soft", "box", "none"):
+            c.flash_style = "glow"
         c.lcd_frame_ms = min(2000, max(50, int(disp.get("lcd_frame_ms", c.lcd_frame_ms))))
         c.flash_fade_in = max(0.0, float(disp.get("flash_fade_in", c.flash_fade_in)))
         c.flash_fade_out = max(FRAME_S, float(disp.get("flash_fade_out", c.flash_fade_out)))
@@ -129,6 +137,10 @@ class Config:
         c.sign_font = str(disp.get("sign_font", ""))
         c.sign_color = hex_rgb(col.get("sign"), None)
         c.live_in_header = bool(disp.get("live_in_header", c.live_in_header))
+        c.show_live = bool(disp.get("show_live", c.show_live))
+        c.clock_style = "flip" if str(disp.get("clock_style", c.clock_style)).lower() == "flip" else "plain"
+        c.clock_font = str(disp.get("clock_font", c.clock_font))
+        c.clock_card_color = hex_rgb(col.get("clock_card"), None) if col.get("clock_card") else None
         c.led_numbers = bool(disp.get("led_numbers", c.led_numbers))
         dis = disp.get("disruptions", True)  # true, false or "all"
         c.disruptions_all = isinstance(dis, str) and dis.lower() == "all"
@@ -178,13 +190,18 @@ class Config:
             f"footer = {q(self.footer)}         # empty = no footer badge",
             f"lcd_frame_ms = {self.lcd_frame_ms}         # how long the Kraken really shows a frame: python tram_lcd.py calibrate",
             f"soon_minutes = {self.soon_minutes}            # countdowns up to this many minutes in the soon colour",
-            f"flash_blink = {'true' if self.flash_blink else 'false'}        # blink once before the fade",
-            f"flash_fade_in = {self.flash_fade_in:g}           # seconds for the box to fade in",
-            f"flash_fade_out = {self.flash_fade_out:g}          # seconds for the box to fade out",
+            f"flash_style = {q(self.flash_style)}        # changed countdown: \"glow\" = digits light up and fade back,"
+            " \"soft\" = soft box easing in and out, \"box\" = box behind, \"none\"",
+            f"flash_blink = {'true' if self.flash_blink else 'false'}        # box only: blink once before the fade",
+            f"flash_fade_in = {self.flash_fade_in:g}           # box only: seconds to fade in",
+            f"flash_fade_out = {self.flash_fade_out:g}          # seconds for the glow / box to fade out",
             f"font = {q(self.font)}            # \"segoe\" or \"arial\"",
             f"now_style = {q(self.now_style)}        # \"text\" = green box, \"dot\" / \"block\" = blinking yellow dot / square",
             f"sign_font = {q(self.sign_font)}            # LED-style font file (in fonts/) for title + directions",
-            f"live_in_header = {'true' if self.live_in_header else 'false'}     # \"● LIVE ◔ 7s\" next to the clock",
+            f"live_in_header = {'true' if self.live_in_header else 'false'}     # \"● LIVE ◔\" next to the clock",
+            f"show_live = {'true' if self.show_live else 'false'}          # false = only the clock (bigger), no LIVE / ring",
+            f"clock_style = {q(self.clock_style)}      # \"flip\" = wide digits on flip cards (with show_live = false)",
+            f"clock_font = {q(self.clock_font)}        # flip clock font[:variation] (in fonts/ or Windows Fonts); empty = sign_font",
             f"disruptions = {q('all') if self.disruptions_all else 'true' if self.disruptions else 'false'}"
             "       # scroll the disruption text when a line can't run; \"all\" = also delays/irregular intervals",
             f"led_numbers = {'true' if self.led_numbers else 'false'}       # minutes + line numbers as LED dot digits",
@@ -194,7 +211,9 @@ class Config:
             "[colors]",
             f"clock = {q('#%02X%02X%02X' % self.clock_color)}",
             f"footer = {q('#%02X%02X%02X' % self.footer_color)}",
-            f"flash = {q('#%02X%02X%02X' % self.flash_color)}          # box behind a changed countdown",
+            f"clock_card = {q('#%02X%02X%02X' % self.clock_card_color if self.clock_card_color else '')}"
+            "        # flip clock cards; empty = dark tint of the clock colour",
+            f"flash = {q('#%02X%02X%02X' % self.flash_color)}          # glow / box of a changed countdown",
             f"badge = {q('#%02X%02X%02X' % self.badge_color) if self.badge_color else q('')}"
             "               # all line badges in one colour; empty = line colours",
             f"soon = {q('#%02X%02X%02X' % self.soon_color)}           # countdowns up to soon_minutes, \"now\" dot",
@@ -306,10 +325,24 @@ OVERRUN_MARGIN_S = 2.0                     # extra frames past the expected next
 MAX_OVERRUN_S = 8.0                        # cap for the learned fetch+upload gap
 
 
+SOFT_PEAK = 0.6  # "soft" box at its brightest: a tint of the flash colour, so white digits stay readable
+
+
 def flash_steps():
-    """Box intensity (0..1) for each frame after a countdown changes: fade in, optional blink, fade out."""
-    n_in = round(CFG.flash_fade_in / lcd_frame_s())
+    """Intensity (0..1) for each frame after a countdown changes. Box: fade in, optional blink, fade out.
+    Glow: the new number appears lit up at once and fades back to its colour (no fade-in, no blink:
+    on the LED digits those read as flicker)."""
     n_out = max(1, round(CFG.flash_fade_out / lcd_frame_s()))
+    if CFG.flash_style == "none":
+        return ()
+    if CFG.flash_style == "glow":
+        return tuple(1.0 - i / n_out for i in range(n_out))
+    if CFG.flash_style == "soft":  # eased in and out: tiny steps at both ends hide the ~4 fps of the LCD
+        n_in = max(1, round(CFG.flash_fade_in / lcd_frame_s()))
+        ease = lambda x: x * x * (3 - 2 * x)  # smoothstep
+        return (tuple(ease(i / n_in) for i in range(1, n_in)) + (1.0,)
+                + tuple(ease(1.0 - i / n_out) for i in range(1, n_out)))
+    n_in = round(CFG.flash_fade_in / lcd_frame_s())
     fade_in = tuple(i / n_in for i in range(1, n_in))  # the fade-out starts at full
     blink = (1.0, 0.0) if CFG.flash_blink else ()
     return fade_in + blink + tuple(1.0 - i / n_out for i in range(n_out))
@@ -955,6 +988,71 @@ def draw_sign(draw, xy, text, f, fill, anchor="lm"):
     draw.text((x, y - top / 2), text, font=f, fill=fill, anchor="ls")
 
 
+FLIP_SIZE = 18      # cap height of the flip clock digits in px
+FLIP_STRETCH = 1.3  # digits drawn this much wider than the font
+_flip_cache = {}
+
+
+def flip_font():
+    """Font for the flip clock, sized so its digits are FLIP_SIZE px tall: [display] clock_font
+    ("file.ttf" or "file.ttf:Variation", looked up as given, in fonts/ and in the Windows fonts),
+    else the sign font. None when neither loads."""
+    if CFG.clock_font not in _flip_cache:
+        name, _, variation = CFG.clock_font.partition(":")
+        found = None
+        if name:
+            windir = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+            for path in (name, os.path.join(HERE, "fonts", name), os.path.join(windir, name)):
+                try:
+                    for size in range(FLIP_SIZE, FLIP_SIZE * 3):  # smallest size with digits FLIP_SIZE tall
+                        f = ImageFont.truetype(path, size)
+                        if variation:
+                            f.set_variation_by_name(variation)
+                        if -f.getbbox("8", anchor="ls")[1] >= FLIP_SIZE:
+                            found = f
+                            break
+                    break
+                except (OSError, ValueError) as e:
+                    if path == os.path.join(windir, name):
+                        log(f"clock_font {CFG.clock_font!r} not usable:", repr(e))
+        _flip_cache[CFG.clock_font] = found or sign_font(FLIP_SIZE)
+    return _flip_cache[CFG.clock_font]
+
+
+def draw_flip_clock(img, xy, text, f, fill):
+    """Clock in the sign font, each digit stretched wide on its own card with a split across the
+    middle, like a mechanical flip clock. Centred on xy."""
+    d = ImageDraw.Draw(img)
+    cap = -f.getbbox("8", anchor="ls")[1]
+    dw = round(f.getlength("8") * FLIP_STRETCH)  # every digit gets the same width, so the time doesn't shift
+    pad_x, pad_y, gap = 4, 5, 3
+    card_w, card_h = dw + 2 * pad_x, cap + 2 * pad_y
+    colon_w = round(f.getlength(":")) + 4
+    widths = [colon_w if c == ":" else card_w for c in text]
+    x = round(xy[0] - (sum(widths) + gap * (len(text) - 1)) / 2)
+    y0 = round(xy[1] - card_h / 2)
+    card = CFG.clock_card_color or mix(BG, fill, 0.14)
+    light = sum(card) > sum(fill)  # light cards, dark digits: the colon on the black screen takes the card colour
+    for c, w in zip(text, widths):
+        if c == ":":
+            draw_sign(d, (x + w / 2, xy[1]), c, f, card if light else fill, anchor="mm")
+        else:
+            d.rounded_rectangle((x, y0, x + w - 1, y0 + card_h - 1), radius=4,
+                                fill=card, outline=mix(card, fill, 0.2), width=1)
+            hinge = y0 + card_h // 2  # the split between the two flaps
+            if light:  # only notches at the edges: a line through dark digits looks crossed out
+                d.line((x, hinge, x + 2, hinge), fill=BG, width=1)
+                d.line((x + w - 3, hinge, x + w - 1, hinge), fill=BG, width=1)
+            else:  # behind the digit, so 6, 8, 9 stay readable
+                d.line((x + 1, hinge, x + w - 2, hinge), fill=BG, width=1)
+            gw = max(1, round(f.getlength(c)))
+            glyph = Image.new("L", (gw + 2, cap + 2), 0)
+            ImageDraw.Draw(glyph).text((1, cap + 1), c, font=f, fill=255, anchor="ls")
+            glyph = glyph.resize((round((gw + 2) * FLIP_STRETCH), cap + 2), Image.LANCZOS)
+            img.paste(fill, (round(x + (w - glyph.width) / 2), y0 + pad_y - 1), glyph)
+        x += w + gap
+
+
 def mix(a, b, t):
     return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
@@ -1020,31 +1118,33 @@ def render(view, flash=None, blink_on=True, refresh_in=None, live_pulse=1.0):
             f_title = fit_font(d, title, True, L["title_size"], 18, 236)
             d.text((cx, L["title_y"]), fit(d, title, f_title, 236), font=f_title, fill=sign_col, anchor="mm")
 
-    f_clock = font(True, 22 if columns else 19)
+    f_clock = font(True, (22 if columns else 19) if CFG.show_live else (30 if columns else 24))
     clock_y = L["title_y"] if columns else L["clock_y"]
     live = view["status"][0] == "live"
-    if CFG.live_in_header and live:  # "16:30  ● LIVE  ◔ 7s"
+    if CFG.show_live and CFG.live_in_header and live:  # "16:30  ● LIVE  ◔"
         f_live = font(True, 14)
-        r, rr = 4, 6  # live dot, refresh ring radius
-        secs = f"{max(1, math.ceil(refresh_in))}s" if refresh_in is not None else ""
+        r, rr = 4, 8  # live dot, refresh ring radius
+        ring_on = refresh_in is not None
         w_clock, w_live = d.textlength(view["clock"], font=f_clock), d.textlength("LIVE", font=f_live)
-        w_timer = (2 * rr + 4 + d.textlength(secs, font=f_live)) if secs else 0
-        x = cx - (w_clock + 12 + 2 * r + 5 + w_live + (12 + w_timer if secs else 0)) / 2
+        x = cx - (w_clock + 12 + 2 * r + 5 + w_live + (12 + 2 * rr if ring_on else 0)) / 2
         cy = clock_y
         d.text((x, cy), view["clock"], font=f_clock, fill=CFG.clock_color, anchor="lm")
         x += w_clock + 12
         d.ellipse((x, cy - r, x + 2 * r, cy + r), fill=mix(BG, RED, 0.15 + 0.85 * live_pulse))
         d.text((x + 2 * r + 5, cy), "LIVE", font=f_live, fill=CFG.clock_color, anchor="lm")
-        if secs:  # loading ring: fills up until the next refresh
+        if ring_on:  # loading ring: fills up until the next refresh
             x += 2 * r + 5 + w_live + 12
             ring = (x, cy - rr, x + 2 * rr, cy + rr)
-            d.ellipse(ring, outline=mix(BG, CFG.clock_color, 0.35), width=2)
+            d.ellipse(ring, outline=mix(BG, CFG.clock_color, 0.35), width=3)
             done = 1 - min(1.0, refresh_in / CFG.refresh_seconds)
             if done > 0:
-                d.arc(ring, -90, -90 + 360 * done, fill=CFG.clock_color, width=2)
-            d.text((x + 2 * rr + 4, cy), secs, font=f_live, fill=CFG.clock_color, anchor="lm")
+                d.arc(ring, -90, -90 + 360 * done, fill=CFG.clock_color, width=3)
     else:
-        d.text((cx, clock_y), view["clock"], font=f_clock, fill=CFG.clock_color, anchor="mm")
+        f_flip = flip_font() if CFG.clock_style == "flip" and not CFG.show_live else None
+        if f_flip:
+            draw_flip_clock(img, (cx, clock_y), view["clock"], f_flip, CFG.clock_color)
+        else:
+            d.text((cx, clock_y), view["clock"], font=f_clock, fill=CFG.clock_color, anchor="mm")
 
     left, right = 34, SIZE - 34
     if columns:  # column labels, like on the stop displays
@@ -1140,7 +1240,12 @@ def render(view, flash=None, blink_on=True, refresh_in=None, live_pulse=1.0):
         else:
             nx_w = num_w(nxt, "next")
             f = flash.get(key, 0)
-            if f:  # notification background, fading out; the number fades with it from dark to its colour
+            if f and CFG.flash_style == "glow":  # the digits light up and fade back to their colour
+                col = mix(col, CFG.flash_color, f)
+            elif f and CFG.flash_style == "soft":  # a muted tint behind the digits, which keep their colour
+                d.rounded_rectangle((nx_right - nx_w - 7, y - L["box_h"], nx_right + 5, y + L["box_h"]),
+                                    radius=7, fill=mix(BG, CFG.flash_color, SOFT_PEAK * f))
+            elif f:  # notification background, fading out; the number fades with it from dark to its colour
                 d.rounded_rectangle((nx_right - nx_w - 7, y - L["box_h"], nx_right + 5, y + L["box_h"]),
                                     radius=7, fill=mix(BG, CFG.flash_color, f))
                 if text_on(CFG.flash_color) != (255, 255, 255):  # light box: start with dark text
@@ -1162,8 +1267,8 @@ def render(view, flash=None, blink_on=True, refresh_in=None, live_pulse=1.0):
             d.text((dir_x, y), fit(d, short_dir(towards), f_dir, max_w), font=f_dir, fill=sign_col, anchor="lm")
 
     status, scol = view["status"]
-    if status == "live" and CFG.live_in_header:
-        status = ""  # live + refresh timer are in the header
+    if status == "live" and (CFG.live_in_header or not CFG.show_live):
+        status = ""  # live + refresh timer are in the header, or not shown at all
     elif refresh_in is not None and status == "live":
         status = tr("live", n=max(1, math.ceil(refresh_in)))
     d.text((cx, 268), status.upper(), font=font(True, 16), fill=scol, anchor="mm")
@@ -1262,11 +1367,21 @@ def shared_palette(frames):
     # colours that may not be in the sampled frames: the change box fading, "now" marks
     swatch = [mix(BG, CFG.flash_color, i / 8) for i in range(1, 9)] + [CFG.soon_color, GREEN, RED, FG, DIM]
     swatch += [mix(BG, RED, 0.15 + 0.85 * i / 6) for i in range(6)]  # the LIVE dot pulsing
+    if CFG.flash_style == "soft":  # every shade of the soft box, so neighbouring steps stay distinct
+        swatch += [mix(BG, CFG.flash_color, SOFT_PEAK * i / 16) for i in range(1, 17)]
+    if CFG.flash_style == "glow":  # digits fading from the glow colour back to white / the soon colour
+        swatch += [mix(c, CFG.flash_color, i / 6) for c in (FG, CFG.soon_color) for i in range(1, 7)]
     d = ImageDraw.Draw(mosaic)
     for i, c in enumerate(swatch):
         d.rectangle((i * 8, SIZE * len(sample), i * 8 + 7, SIZE * len(sample) + 7), fill=c)
     pal = mosaic.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     return [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
+
+
+def bg_index(img):
+    """Palette index of the colour closest to the background colour BG."""
+    pal = img.getpalette()[:768]
+    return min(range(len(pal) // 3), key=lambda i: sum((pal[3 * i + k] - BG[k]) ** 2 for k in range(3)))
 
 
 def push(dev, frames, gif_ok):
@@ -1276,8 +1391,12 @@ def push(dev, frames, gif_ok):
         # optimize=False: otherwise Pillow marks unchanged pixels with a "transparent" palette index.
         # The Kraken ignores GIF transparency and paints that index's real colour - often one of the
         # yellows - so parts of the screen flashed yellow for a frame. disposal=1: draw over the last frame.
+        # background: the Kraken clears the whole screen to the GIF's background colour when a new GIF
+        # starts. Pillow leaves it at palette index 0, which is whatever colour the quantizer put first
+        # (often a pale yellow), so the whole screen flashed yellow on some uploads.
         frames[0].save(GIF_OUT, save_all=True, append_images=frames[1:],
-                       duration=int(FRAME_S * 1000), loop=0, optimize=False, disposal=1)
+                       duration=int(FRAME_S * 1000), loop=0, optimize=False, disposal=1,
+                       background=bg_index(frames[0]))
         dev.set_screen("lcd", "gif", GIF_OUT)
     else:
         frames[0].save(PNG_OUT)

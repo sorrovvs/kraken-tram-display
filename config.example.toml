@@ -31,13 +31,17 @@ refresh_seconds = 10        # data refresh interval (min 5)
 lcd_frame_ms = 250         # how long the Kraken really shows a GIF frame - measure: python tram_lcd.py calibrate
 footer = "© Sorrow"         # empty = no footer badge
 soon_minutes = 2            # countdowns up to this many minutes in the soon colour
-flash_blink = true          # blink once before the fade
-flash_fade_in = 0           # seconds for the box behind a changed countdown to fade in
-flash_fade_out = 3          # seconds for it to fade out
+flash_style = "glow"        # changed countdown: "glow" = digits light up and fade back, "soft" = soft box easing in and out, "box", "none"
+flash_blink = true          # box only: blink once before the fade
+flash_fade_in = 0           # soft / box: seconds to fade in
+flash_fade_out = 1.5        # seconds for the glow / box to fade out
 font = "arial"              # "arial" or "segoe"
 now_style = "text"          # "text" = "jetzt"/"now" box, "dot" / "block" = yellow dot / square
 sign_font = ""              # your own LED-style font file in fonts/ for title + directions (not included)
-live_in_header = true       # "● LIVE ◔ 7s" next to the clock
+live_in_header = true       # "● LIVE ◔" next to the clock
+show_live = true            # false = only the clock (bigger), no LIVE / refresh ring
+clock_style = "plain"       # "flip" = wide digits on flip cards (with show_live = false)
+clock_font = ""             # flip clock font[:variation], e.g. "bahnschrift.ttf:SemiBold"; empty = sign_font
 disruptions = true          # scroll the disruption text when a line can't run; "all" = also delays/irregular intervals
 led_numbers = true          # minutes + line numbers as LED dot digits
 header = "columns"          # "columns" = clock + Linie / Abfahrt in Minuten, "station" = station name + clock
@@ -45,8 +49,9 @@ badge_style = "outline"     # "outline" = frame, "fill" = solid badge
 
 [colors]
 clock = "#C8AAFF"
+clock_card = ""             # flip clock cards; empty = dark tint of the clock colour (e.g. "#1E1E22")
 footer = "#C8AAFF"
-flash = "#E3000F"           # box behind a changed countdown
+flash = "#E3000F"           # glow / box colour of a changed countdown
 badge = "#FFFFFF"           # all line badges in one colour; empty = line colours
 badge_text = "#FFFFFF"      # line numbers; empty = automatic
 soon = "#FFCC00"            # countdowns up to soon_minutes, "now" dot

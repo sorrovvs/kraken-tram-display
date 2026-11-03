@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-03
+
+### Added
+- `show_live = false` hides LIVE and the refresh ring and shows just a bigger, centred clock (connection
+  problems are still shown at the bottom)
+- `clock_style = "flip"`: the clock in the sign font, digits stretched wide on flip cards with a split
+  behind them (with `show_live = false`)
+- `clock_font` (e.g. `"bahnschrift.ttf:SemiBold"`, from `fonts/` or the Windows fonts) and colour
+  `clock_card` for the flip clock. On light cards the split shows as notches at the edges and the colon
+  takes the card colour
+- `flash_style = "soft"`: a muted box behind the number that eases in and out (smoothstep, more palette
+  shades), so the ~4 frames per second of the LCD don't show as steps
+
+### Changed
+- A changed countdown no longer gets a box behind it: its digits light up in the `flash` colour and fade
+  back (new option `flash_style`: `"glow"` (default), `"box"` for the old look, `"none"`)
+- The header shows only the refresh ring, a bit bigger, without the seconds next to it
+
+### Fixed
+- Whole screen flashing yellow for a moment on some refreshes: the Kraken clears the screen to the GIF's
+  background colour when a new GIF starts, and that was palette index 0 - often a pale yellow. The
+  background is now always the black palette entry
+
 ## [1.6.0] - 2026-11-03
 
 ### Changed
