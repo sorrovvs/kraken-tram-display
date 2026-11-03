@@ -1361,20 +1361,27 @@ def shared_palette(frames):
     switching to it. On one palette, unchanged pixels stay identical: a fraction of the size."""
     step = max(1, len(frames) // 8)
     sample = frames[::step][:8]
-    mosaic = Image.new("RGB", (SIZE, SIZE * len(sample) + 8), BG)
+    mosaic = Image.new("RGB", (SIZE, SIZE * len(sample)), BG)
     for i, f in enumerate(sample):
         mosaic.paste(f, (0, SIZE * i))
     # colours that may not be in the sampled frames: the change box fading, "now" marks
     swatch = [mix(BG, CFG.flash_color, i / 8) for i in range(1, 9)] + [CFG.soon_color, GREEN, RED, FG, DIM]
     swatch += [mix(BG, RED, 0.15 + 0.85 * i / 6) for i in range(6)]  # the LIVE dot pulsing
+    # disruption text: it only scrolls in some frames, so the sampled frames often miss it
+    swatch += [mix(BG, CFG.info_color, i / 4) for i in range(1, 5)]
     if CFG.flash_style == "soft":  # every shade of the soft box, so neighbouring steps stay distinct
         swatch += [mix(BG, CFG.flash_color, SOFT_PEAK * i / 16) for i in range(1, 17)]
     if CFG.flash_style == "glow":  # digits fading from the glow colour back to white / the soon colour
         swatch += [mix(c, CFG.flash_color, i / 6) for c in (FG, CFG.soon_color) for i in range(1, 7)]
-    d = ImageDraw.Draw(mosaic)
-    for i, c in enumerate(swatch):
-        d.rectangle((i * 8, SIZE * len(sample), i * 8 + 7, SIZE * len(sample) + 7), fill=c)
-    pal = mosaic.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    # The swatch colours are appended to the palette as they are. Run through the quantizer with the
+    # frames, small swatches got merged into big areas of similar colour (orange disruption text came
+    # out yellow, fade steps collapsed into one). 128 computed + the swatch fits a GIF's 256 colours.
+    base = mosaic.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    colours = [tuple(base.getpalette()[i:i + 3]) for i in range(0, 3 * 128, 3)]
+    colours += [c for c in dict.fromkeys(swatch) if c not in colours]
+    colours = colours[:256]
+    pal = Image.new("P", (1, 1))
+    pal.putpalette([v for c in colours for v in c] + [0] * (768 - 3 * len(colours)))
     return [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
 
 

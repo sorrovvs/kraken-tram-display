@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-03
+
+### Fixed
+- Disruption text yellow instead of orange, and fade steps merging: colours that aren't in every frame
+  (disruption text, glow / soft box shades) are now added to the GIF palette exactly instead of going
+  through the quantizer, which merged them into similar colours
+
 ## [1.7.0] - 2026-11-03
 
 ### Added
