@@ -38,7 +38,7 @@ font = "arial"              # "arial" or "segoe"
 now_style = "text"          # "text" = "jetzt"/"now" box, "dot" / "block" = yellow dot / square
 sign_font = ""              # your own LED-style font file in fonts/ for title + directions (not included)
 live_in_header = true       # "● LIVE ◔ 7s" next to the clock
-disruptions = true          # scroll the disruption text when a line can't run
+disruptions = true          # scroll the disruption text when a line can't run; "all" = also delays/irregular intervals
 led_numbers = true          # minutes + line numbers as LED dot digits
 header = "columns"          # "columns" = clock + Linie / Abfahrt in Minuten, "station" = station name + clock
 badge_style = "outline"     # "outline" = frame, "fill" = solid badge

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-03
+
+### Added
+- `disruptions = "all"` also shows minor disruptions (irregular intervals, delays), not only lines that
+  can't run
+
 ## [1.4.3] - 2026-11-02
 
 ### Fixed

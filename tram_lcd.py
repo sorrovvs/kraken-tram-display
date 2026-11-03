@@ -82,6 +82,7 @@ class Config:
     sign_color: tuple | None = None                  # colour for title + directions; None = white
     live_in_header: bool = True                      # "● LIVE ◔ 7s" next to the clock instead of the status line
     disruptions: bool = True                         # scroll the disruption text when a line can't run
+    disruptions_all: bool = False                    # also minor ones (irregular intervals, delays)
     info_color: tuple = (255, 150, 90)               # colour of that text
     led_numbers: bool = True                         # minutes + line numbers as LED dot digits
     header: str = "columns"                          # "station" = name + clock, "columns" = clock + column labels
@@ -128,7 +129,9 @@ class Config:
         c.sign_color = hex_rgb(col.get("sign"), None)
         c.live_in_header = bool(disp.get("live_in_header", c.live_in_header))
         c.led_numbers = bool(disp.get("led_numbers", c.led_numbers))
-        c.disruptions = bool(disp.get("disruptions", True))
+        dis = disp.get("disruptions", True)  # true, false or "all"
+        c.disruptions_all = isinstance(dis, str) and dis.lower() == "all"
+        c.disruptions = c.disruptions_all or (dis is True or str(dis).lower() == "true")
         c.info_color = hex_rgb(col.get("info"), c.info_color)
         c.header = "station" if str(disp.get("header", c.header)).lower() == "station" else "columns"
         c.badge_style = "fill" if str(disp.get("badge_style", c.badge_style)).lower() == "fill" else "outline"
@@ -181,7 +184,8 @@ class Config:
             f"now_style = {q(self.now_style)}        # \"text\" = green box, \"dot\" / \"block\" = blinking yellow dot / square",
             f"sign_font = {q(self.sign_font)}            # LED-style font file (in fonts/) for title + directions",
             f"live_in_header = {'true' if self.live_in_header else 'false'}     # \"● LIVE ◔ 7s\" next to the clock",
-            f"disruptions = {'true' if self.disruptions else 'false'}       # scroll the disruption text when a line can't run",
+            f"disruptions = {q('all') if self.disruptions_all else 'true' if self.disruptions else 'false'}"
+            "       # scroll the disruption text when a line can't run; \"all\" = also delays/irregular intervals",
             f"led_numbers = {'true' if self.led_numbers else 'false'}       # minutes + line numbers as LED dot digits",
             f"header = {q(self.header)}          # \"station\" or \"columns\" (clock + Linie / Abfahrt in Minuten)",
             f"badge_style = {q(self.badge_style)}       # \"fill\" or \"outline\"",
@@ -518,7 +522,7 @@ def disruptions(lines):
         except ValueError:
             pass
         text = " ".join((info.get("description") or info.get("title") or "").split())
-        if not any(w in text.casefold() for w in CANT_RUN):
+        if not CFG.disruptions_all and not any(w in text.casefold() for w in CANT_RUN):
             continue
         for line in info.get("relatedLines") or []:
             if line in lines:
