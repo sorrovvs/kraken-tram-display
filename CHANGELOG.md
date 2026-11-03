@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-03
+
+### Changed
+- Disruptions now show the cause and the expected end instead of the full report, e.g.
+  "Schadhafter PKW: Dauer wsl. bis 12:13" (a date for longer works). The end comes from the short
+  reports (`stoerungkurz`) when the main report has none
+
 ## [1.5.0] - 2026-11-03
 
 ### Added

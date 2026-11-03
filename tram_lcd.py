@@ -22,6 +22,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import tempfile
 import time
@@ -212,9 +213,11 @@ CFG = Config()
 
 TEXT = {
     "de": {"now": "jetzt", "live": "live · neu in {n} s", "refresh": "neu in {n} s", "offline": "keine Verbindung",
-           "stale": "keine Live-Daten seit {m} min", "line": "Linie", "departs": "Abfahrt in Minuten"},
+           "stale": "keine Live-Daten seit {m} min", "line": "Linie", "departs": "Abfahrt in Minuten",
+           "until": ": Dauer wsl. bis {t}"},
     "en": {"now": "now", "live": "live · refresh in {n} s", "refresh": "refresh in {n} s", "offline": "no connection",
-           "stale": "no live data for {m} min", "line": "Line", "departs": "Departs in min"},
+           "stale": "no live data for {m} min", "line": "Line", "departs": "Departs in min",
+           "until": ": expected until {t}"},
 }
 
 
@@ -493,7 +496,7 @@ def select_rows(lines, oebb=None):
     return rows[:MAX_ROWS]
 
 
-TRAFFIC_API = "https://www.wienerlinien.at/ogd_realtime/trafficInfoList?name=stoerunglang{}"
+TRAFFIC_API = "https://www.wienerlinien.at/ogd_realtime/trafficInfoList?name=stoerunglang&name=stoerungkurz{}"
 TRAFFIC_EVERY_S = 60  # disruptions change slowly; don't ask every refresh
 # A disruption is shown only when the line can't run (or only part of its route). Reports that
 # just mention irregular intervals or delays - typically after the problem is gone - are not.
@@ -503,30 +506,66 @@ CANT_RUN = ("unterbrochen", "kein betrieb", "eingestellt", "fährt nicht", "fahr
 _traffic = {"at": 0.0, "lines": {}}  # line -> disruption text
 
 
+def _api_time(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%f%z") if s else None
+    except ValueError:
+        return None
+
+
+def disruption_reason(info):
+    """Short cause of a disruption, e.g. "Falschparker" (from "42: Falschparker")."""
+    reason = (info.get("reasonName") or "").strip()
+    if reason and reason != "undefined":
+        return reason
+    title = " ".join((info.get("title") or "").split())
+    title = re.sub(r"^[^:]{1,30}:\s*", "", title)  # drop the "42: " / "25, 26, 27: " line prefix
+    return title or " ".join((info.get("description") or "").split())
+
+
+def disruption_text(reason, until, now):
+    """"Falschparker: Dauer wsl. bis 11:00" (a date instead of the time when it ends on another day)."""
+    if not until:
+        return reason
+    local = until.astimezone()
+    when = local.strftime("%H:%M") if local.date() == now.astimezone().date() else local.strftime("%d.%m.")
+    return reason + tr("until", t=when)
+
+
 def disruptions(lines):
     """{line: text} for lines that currently can't run, from Wiener Linien's disruption feed
-    (lift and escalator outages are a different feed and never included)."""
+    (lift and escalator outages are a different feed and never included). The text is the cause
+    and, when known, the expected end. "stoerunglang" holds the disruption itself; its expected
+    end is often only in the matching short reports ("stoerungkurz")."""
     if time.time() - _traffic["at"] < TRAFFIC_EVERY_S:
         return _traffic["lines"]
     url = TRAFFIC_API.format("".join(f"&relatedLine={urllib.parse.quote(l)}" for l in sorted(lines)))
-    data = http_json(url)
+    data = http_json(url).get("data", {})
+    cat = {c.get("id"): c.get("name") for c in data.get("trafficInfoCategories", [])}
     now = datetime.now(timezone.utc)
-    found = {}
-    for info in data.get("data", {}).get("trafficInfos", []):
+    current, short = [], []
+    for info in data.get("trafficInfos", []):
         t = info.get("time", {})
-        try:
-            if t.get("start") and datetime.strptime(t["start"], "%Y-%m-%dT%H:%M:%S.%f%z") > now:
-                continue
-            if t.get("end") and datetime.strptime(t["end"], "%Y-%m-%dT%H:%M:%S.%f%z") < now:
-                continue
-        except ValueError:
-            pass
+        start, end = _api_time(t.get("start")), _api_time(t.get("end"))
+        if (start and start > now) or (end and end < now):
+            continue
+        kind = cat.get(info.get("refTrafficInfoCategoryId"), "stoerunglang")
+        (short if kind == "stoerungkurz" else current).append((info, start, end))
+    found = {}
+    for info, start, end in current:
         text = " ".join((info.get("description") or info.get("title") or "").split())
         if not CFG.disruptions_all and not any(w in text.casefold() for w in CANT_RUN):
             continue
-        for line in info.get("relatedLines") or []:
-            if line in lines:
-                found[line] = f"{found[line]}  +++  {text}" if line in found else text
+        related = set(info.get("relatedLines") or [])
+        if not end:  # expected end from short reports for the same line, issued since it started
+            ends = [e for i, s, e in short if e and related & set(i.get("relatedLines") or [])
+                    and (not start or not s or s >= start - timedelta(minutes=10))]
+            end = max(ends, default=None)
+        shown = disruption_text(disruption_reason(info), end, now)
+        for line in related & set(lines):
+            if shown not in found.setdefault(line, []):
+                found[line].append(shown)
+    found = {line: "  +++  ".join(texts) for line, texts in found.items()}
     _traffic.update(at=time.time(), lines=found)
     return found
 
