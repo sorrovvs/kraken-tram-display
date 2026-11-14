@@ -60,6 +60,7 @@ class Config:
     station: str = ""
     diva: str = ""
     departures: list = field(default_factory=list)  # [{"line": "42", "towards": "Antonigasse"}], towards optional
+    night: list = field(default_factory=list)       # rows that replace the Wiener Linien rows once those have no departures left
     title: str = ""                                  # shown at the top; empty = station name
     language: str = "de"
     now_text: str = ""                               # replaces "jetzt"/"now"; empty = language default
@@ -107,6 +108,11 @@ class Config:
                 {"line": str(d["line"]), "towards": str(d.get("towards", "")),
                  "oebb": str(d.get("oebb_station", ""))}  # set = from ÖBB (S-Bahn) instead of Wiener Linien
                 for d in raw.get("departures", []) if "line" in d
+            ],
+            night=[
+                {"line": str(d["line"]), "towards": str(d.get("towards", "")),
+                 "diva": str(d.get("diva", "")), "oebb": ""}  # diva empty = the station's own
+                for d in raw.get("night", []) if "line" in d
             ],
             title=str(disp.get("title", "")),
             language=str(disp.get("language", "de")).lower(),
@@ -177,6 +183,14 @@ class Config:
                 lines.append(f"towards = {q(d['towards'])}")
             if d.get("oebb"):
                 lines.append(f"oebb_station = {q(d['oebb'])}")
+        if self.night:
+            lines += ["", "# Shown instead of the Wiener Linien rows once those have no departures left (night)"]
+        for d in self.night:
+            lines += ["", "[[night]]", f"line = {q(d['line'])}"]
+            if d.get("towards"):
+                lines.append(f"towards = {q(d['towards'])}")
+            if d.get("diva"):
+                lines.append(f"diva = {q(d['diva'])}")
         lines += [
             "",
             "[display]",
@@ -505,9 +519,11 @@ def oebb_lines(station):
     return list(merged.values())
 
 
-def select_rows(lines, oebb=None):
-    """Apply the [[departures]] filter and order from the config. oebb: {station: oebb_lines()}."""
-    if not CFG.departures:
+def select_rows(lines, oebb=None, wants=None):
+    """Apply the [[departures]] filter and order from the config (or `wants`, e.g. the [[night]]
+    rows). oebb: {station: oebb_lines()}."""
+    wants = CFG.departures if wants is None else wants
+    if not wants:
         return sorted(lines, key=line_sort_key)[:MAX_ROWS]
     def pool(want):
         src = (oebb or {}).get(want["oebb"], []) if want.get("oebb") else lines
@@ -518,9 +534,9 @@ def select_rows(lines, oebb=None):
 
     # Wiener Linien rows whose destination isn't in the feed right now (e.g. late evening, when
     # only depot runs are coming) take the line's direction that no other configured row named
-    claimed = [id(e) for w in CFG.departures for e in pool(w) if w["towards"] and exact(w, e)]
+    claimed = [id(e) for w in wants for e in pool(w) if w["towards"] and exact(w, e)]
     rows = []
-    for want in CFG.departures:
+    for want in wants:
         found = [e for e in pool(want) if exact(want, e)]
         if not found and want["towards"] and not want.get("oebb"):
             found = [e for e in pool(want) if id(e) not in claimed][:1]
@@ -607,6 +623,28 @@ OEBB_TIMEOUT_S = 4  # ÖBB sometimes hangs; don't let it hold up the whole refre
 _pool = ThreadPoolExecutor(max_workers=4)
 
 
+def night_swap(rows, lines):
+    """Once none of the Wiener Linien rows has a departure left (the trams have stopped for the
+    night, or the feed dropped the lines altogether), show the [[night]] rows in their place,
+    e.g. the U6 from a nearby station. The trams come back as soon as their first morning run
+    is in the feed. ÖBB rows stay as they are."""
+    has_wl = not CFG.departures or any(not w.get("oebb") for w in CFG.departures)
+    wl = [i for i, r in enumerate(rows) if any(r is e for e in lines)]
+    if not CFG.night or not has_wl or any(rows[i]["times"] for i in wl):
+        return rows
+    try:
+        night = []
+        for diva in dict.fromkeys(w["diva"] or CFG.diva for w in CFG.night):
+            wants = [w for w in CFG.night if (w["diva"] or CFG.diva) == diva]
+            night += select_rows(lines if diva == CFG.diva else monitor_lines(diva), wants=wants)
+    except Exception as e:  # keep showing the empty tram rows
+        log("night fetch failed:", repr(e))
+        return rows
+    at = wl[0] if wl else 0
+    rest = [r for i, r in enumerate(rows) if i not in wl]
+    return (rest[:at] + night + rest[at:])[:MAX_ROWS]
+
+
 def fetch():
     # ÖBB in the background while Wiener Linien is fetched
     jobs = {s: _pool.submit(oebb_lines, s) for s in {w["oebb"] for w in CFG.departures if w.get("oebb")}}
@@ -618,7 +656,8 @@ def fetch():
         except Exception as e:  # keep the Wiener Linien rows going; reuse the last ÖBB data
             log("ÖBB fetch failed:", repr(e))
             oebb[station] = _oebb_cache.get(station, [])
-    rows = [{**r, "times": r["times"][:3]} for r in select_rows(lines, oebb)]
+    rows = night_swap(select_rows(lines, oebb), lines)
+    rows = [{**r, "times": r["times"][:3]} for r in rows]
     if CFG.disruptions:
         wl_lines = {r["line"] for r in rows if not r["line"].startswith("S")}
         try:
