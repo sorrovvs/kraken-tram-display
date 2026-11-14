@@ -122,6 +122,13 @@ line = "9"
 # towards = "Hütteldorf"
 # oebb_station = "1191801"     # Gersthof
 
+# Night rows: shown instead of the Wiener Linien rows once those have no departures left
+# (e.g. the U6 from a nearby station after the last tram); `diva` empty = this station
+# [[night]]
+# line = "U6"
+# towards = "Floridsdorf"
+# diva = "60200874"            # Michelbeuern-AKH
+
 [display]
 title = ""               # empty = station name
 language = "de"          # "de" or "en"

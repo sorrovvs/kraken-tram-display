@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `[[night]]` rows (e.g. the U6 from a nearby station, via its `diva`): shown in place of the Wiener
+  Linien rows once none of them has a departure left, and swapped back when the first morning run
+  shows up. ÖBB rows are not affected
+
 ## [1.7.1] - 2026-11-03
 
 ### Fixed
